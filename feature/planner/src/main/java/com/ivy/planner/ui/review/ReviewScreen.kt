@@ -37,6 +37,7 @@ import com.ivy.navigation.screenScopedViewModel
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
+import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.withWeek
 import java.time.LocalDate
@@ -44,7 +45,7 @@ import java.time.LocalDate
 @Composable
 fun PlannerReviewScreenImpl() {
     val viewModel: ReviewViewModel = screenScopedViewModel()
-    ReviewUi(viewModel.uiState(), viewModel::onEvent)
+    PlannerTheme { ReviewUi(viewModel.uiState(), viewModel::onEvent) }
 }
 
 @Composable

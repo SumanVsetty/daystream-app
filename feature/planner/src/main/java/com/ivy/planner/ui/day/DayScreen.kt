@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -56,9 +56,11 @@ import com.ivy.planner.ui.MonthCalendar
 import com.ivy.planner.ui.Pill
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
+import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.RapidLog
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.WeekStrip
+import com.ivy.planner.ui.timelineColor
 import com.ivy.planner.ui.withWeek
 import java.time.LocalDate
 
@@ -68,7 +70,7 @@ fun PlannerDayScreenImpl(screen: PlannerDayScreen) {
     LaunchedEffect(screen) {
         screen.epochDay?.let { viewModel.onEvent(DayEvent.SelectDate(LocalDate.ofEpochDay(it))) }
     }
-    DayUi(state = viewModel.uiState(), onEvent = viewModel::onEvent)
+    PlannerTheme { DayUi(state = viewModel.uiState(), onEvent = viewModel::onEvent) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,9 +146,12 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit) {
                     )
                 }
             }
-            items(state.rows, key = { it.key }) { row ->
+            itemsIndexed(state.rows, key = { _, row -> row.key }) { index, row ->
+                val colors = state.rows.map { timelineColor(it.kind, it.state) }
                 Column(Modifier.padding(horizontal = 12.dp)) {
                     EntryRow(
+                        lineAbove = if (index > 0) colors[index - 1] else null,
+                        lineBelow = if (index < state.rows.lastIndex) colors[index] else null,
                         kind = row.kind,
                         title = row.title,
                         description = row.description,

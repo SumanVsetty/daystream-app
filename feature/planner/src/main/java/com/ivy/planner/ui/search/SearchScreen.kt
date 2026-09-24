@@ -34,16 +34,17 @@ import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.domain.Entry
+import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.withWeek
 import com.ivy.ui.ComposeViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @Immutable
 data class SearchState(val query: String, val results: ImmutableList<Entry>)
@@ -76,6 +77,7 @@ fun PlannerSearchScreenImpl() {
     val viewModel: PlannerSearchViewModel = screenScopedViewModel()
     val state = viewModel.uiState()
     val nav = navigation()
+    PlannerTheme {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -126,4 +128,5 @@ fun PlannerSearchScreenImpl() {
             }
         }
     }
+}
 }

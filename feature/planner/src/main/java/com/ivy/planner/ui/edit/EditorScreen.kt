@@ -50,6 +50,7 @@ import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.ui.KindChip
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
+import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.PlannerTimePicker
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.label
@@ -70,7 +71,7 @@ fun PlannerEditScreenImpl(screen: PlannerEditScreen) {
             ),
         )
     }
-    EditorUi(viewModel.uiState(), viewModel::onEvent)
+    PlannerTheme { EditorUi(viewModel.uiState(), viewModel::onEvent) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -6,8 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -109,7 +113,19 @@ fun EntryLeading(kind: EntryKind, state: EntryState, onToggle: () -> Unit) {
     }
 }
 
-/** One line on the Day log. */
+/** The colour of an entry's timeline segment. */
+@Composable
+fun timelineColor(kind: EntryKind, state: EntryState): Color = when {
+    kind == EntryKind.EVENT -> PlannerColors.Event
+    kind == EntryKind.NOTE || kind == EntryKind.JOURNAL -> MaterialTheme.colorScheme.outlineVariant
+    state == EntryState.MISSED || state == EntryState.SKIPPED -> MaterialTheme.colorScheme.outlineVariant
+    else -> PlannerColors.Done
+}
+
+/**
+ * One line on the Day log. [lineAbove] and [lineBelow] draw the vertical timeline
+ * that connects consecutive entries (null = no segment, e.g. first or last entry).
+ */
 @Composable
 fun EntryRow(
     kind: EntryKind,
@@ -120,6 +136,8 @@ fun EntryRow(
     repeating: Boolean,
     onToggle: () -> Unit,
     onClick: () -> Unit,
+    lineAbove: Color? = null,
+    lineBelow: Color? = null,
 ) {
     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -127,31 +145,46 @@ fun EntryRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+            .height(IntrinsicSize.Min)
+            .clickable(onClick = onClick),
         verticalAlignment = Alignment.Top,
     ) {
-        EntryLeading(kind, state, onToggle)
+        Box(
+            modifier = Modifier
+                .width(40.dp)
+                .fillMaxHeight()
+                .drawBehind {
+                    val x = size.width / 2
+                    val stroke = 2.dp.toPx()
+                    // the icon occupies roughly 8dp..32dp of the 40dp leading slot
+                    lineAbove?.let { drawLine(it, Offset(x, 0f), Offset(x, 6.dp.toPx()), stroke) }
+                    lineBelow?.let { drawLine(it, Offset(x, 34.dp.toPx()), Offset(x, size.height), stroke) }
+                },
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            EntryLeading(kind, state, onToggle)
+        }
         Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f).padding(top = 8.dp, end = 8.dp)) {
+        Column(Modifier.weight(1f).padding(top = 8.dp, end = 8.dp, bottom = 16.dp)) {
             Text(
                 text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
                 color = if (faded || kind == EntryKind.NOTE) muted else onSurface,
                 textDecoration = if (state == EntryState.DONE) TextDecoration.LineThrough else null,
             )
             if (description.isNotBlank()) {
                 Text(
                     text = description,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     color = muted,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
             if (meta.isNotBlank() || repeating) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     if (repeating) {
                         Icon(Icons.Outlined.Repeat, contentDescription = "Repeats", tint = muted, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))

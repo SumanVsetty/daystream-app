@@ -54,6 +54,7 @@ import com.ivy.planner.domain.EntryState
 import com.ivy.planner.domain.IsoWeek
 import com.ivy.planner.ui.CheckCircle
 import com.ivy.planner.ui.PlannerColors
+import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.RapidLog
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.ShortDayFmt
@@ -70,7 +71,7 @@ fun PlannerWeekScreenImpl(screen: PlannerWeekScreen) {
             viewModel.onEvent(WeekEvent.SetWeek(IsoWeek(year, week)))
         }
     }
-    WeekUi(viewModel.uiState(), viewModel::onEvent)
+    PlannerTheme { WeekUi(viewModel.uiState(), viewModel::onEvent) }
 }
 
 private val RangeFmt = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
