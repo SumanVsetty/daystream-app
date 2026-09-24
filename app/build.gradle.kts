@@ -57,7 +57,7 @@ android {
 
             signingConfig = signingConfigs.getByName("release")
 
-            resValue("string", "app_name", "Daystream")
+            resValue("string", "app_name", "Apeiro")
         }
 
         debug {
@@ -70,7 +70,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
 
             applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "Daystream Debug")
+            resValue("string", "app_name", "Apeiro Debug")
         }
 
         create("demo") {
@@ -89,7 +89,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
 
             applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "Daystream")
+            resValue("string", "app_name", "Apeiro")
         }
     }
 
