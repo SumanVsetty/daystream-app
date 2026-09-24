@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -180,7 +182,9 @@ fun BoxWithConstraintsScope.BottomBar(
     var dragOffset by remember {
         mutableStateOf(Offset.Zero)
     }
-    // + & x button
+    // Apeiro logo (home, collapsed) / + / x button
+    val showLogo = tab == MainTab.HOME && !expanded
+    val logoBorderColor = UI.colors.medium
     IvyCircleButton(
         modifier = Modifier
             .layout { measurable, constraints ->
@@ -193,7 +197,10 @@ fun BoxWithConstraintsScope.BottomBar(
                 }
             }
             .size(FAB_BUTTON_SIZE)
-            .rotate(fabRotation)
+            .thenIf(showLogo) {
+                border(1.dp, logoBorderColor, CircleShape)
+            }
+            .rotate(if (showLogo) 0f else fabRotation)
             .zIndex(200f)
             .thenIf(tab == MainTab.HOME) {
                 pointerInput(Unit) {
@@ -238,10 +245,10 @@ fun BoxWithConstraintsScope.BottomBar(
             }
             .testTag("fab_add"),
         backgroundPadding = 8.dp,
-        icon = R.drawable.ic_add,
+        icon = if (showLogo) R.drawable.ic_apeiro_logo else R.drawable.ic_add,
         backgroundGradient = when (tab) {
             MainTab.HOME -> {
-                if (!expanded) GradientIvy else Gradient.solid(UI.colors.gray)
+                if (!expanded) Gradient.solid(White) else Gradient.solid(UI.colors.gray)
             }
 
             MainTab.ACCOUNTS -> {
@@ -249,10 +256,7 @@ fun BoxWithConstraintsScope.BottomBar(
             }
         },
         hasShadow = !expanded,
-        tint = when (tab) {
-            MainTab.HOME -> White
-            MainTab.ACCOUNTS -> White
-        }
+        tint = if (showLogo) Color.Unspecified else White
     ) {
         when (tab) {
             MainTab.HOME -> {
