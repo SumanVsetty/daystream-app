@@ -45,6 +45,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
+import com.ivy.design.utils.thenIf
 import com.ivy.legacy.Constants
 import com.ivy.legacy.IvyWalletCtx
 import com.ivy.legacy.IvyWalletPreview
@@ -53,9 +54,8 @@ import com.ivy.legacy.utils.clickableNoIndication
 import com.ivy.legacy.utils.drawColoredShadow
 import com.ivy.legacy.utils.lerp
 import com.ivy.legacy.utils.openUrl
-import com.ivy.legacy.utils.springBounceSlow
-import com.ivy.design.utils.thenIf
 import com.ivy.legacy.utils.rememberInteractionSource
+import com.ivy.legacy.utils.springBounceSlow
 import com.ivy.legacy.utils.toDensityDp
 import com.ivy.legacy.utils.toDensityPx
 import com.ivy.onboarding.OnboardingState
@@ -174,9 +174,9 @@ fun BoxWithConstraintsScope.OnboardingSplashLogin(
                 .clickableNoIndication(rememberInteractionSource()) {
                     internalSwitch = !internalSwitch
                 },
-            painter = painterResource(id = R.drawable.ivy_wallet_logo),
-            contentScale = ContentScale.FillBounds,
-            contentDescription = "Ivy Wallet logo"
+            painter = painterResource(id = R.drawable.ic_apeiro_logo_tile),
+            contentScale = ContentScale.Fit,
+            contentDescription = "Apeiro logo"
         )
 
         Spacer(Modifier.height(marginTextTop))
@@ -186,7 +186,7 @@ fun BoxWithConstraintsScope.OnboardingSplashLogin(
                 ivyContext = ivyContext,
                 percentTransition = percentTransition
             ),
-            text = "Ivy Wallet",
+            text = "Apeiro",
             style = UI.typo.h2.style(
                 color = UI.colors.pureInverse,
                 fontWeight = FontWeight.ExtraBold
@@ -204,28 +204,6 @@ fun BoxWithConstraintsScope.OnboardingSplashLogin(
             style = UI.typo.b2.style(
                 color = UI.colors.pureInverse,
                 fontWeight = FontWeight.SemiBold
-            )
-        )
-
-        val uriHandler = LocalUriHandler.current
-        Text(
-            modifier = Modifier
-                .animateXCenterToLeft(
-                    ivyContext = ivyContext,
-                    percentTransition = percentTransition
-                )
-                .clickable {
-                    openUrl(
-                        uriHandler = uriHandler,
-                        url = Constants.URL_IVY_WALLET_REPO
-                    )
-                }
-                .padding(vertical = 8.dp)
-                .padding(end = 8.dp),
-            text = stringResource(R.string.opensource),
-            style = UI.typo.c.style(
-                color = Green,
-                fontWeight = FontWeight.Bold
             )
         )
 
@@ -284,8 +262,6 @@ private fun LoginSection(
 
             Spacer(Modifier.weight(3f))
             Spacer(Modifier.height(16.dp))
-
-            PrivacyPolicyAndTC()
 
             Spacer(Modifier.height(16.dp))
         }

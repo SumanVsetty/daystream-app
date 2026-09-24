@@ -55,7 +55,7 @@ enum class ImportType {
 
     @DrawableRes
     fun logo(): Int = when (this) {
-        IVY -> R.drawable.ivywallet_logo
+        IVY -> R.drawable.ic_apeiro_logo_tile
         MONEY_MANAGER -> R.drawable.moneymanager_logo
         WALLET_BY_BUDGET_BAKERS -> R.drawable.wallet_by_budgetbakers_logo
         SPENDEE -> R.drawable.spendee_logo
@@ -68,7 +68,7 @@ enum class ImportType {
     }
 
     fun listName(): String = when (this) {
-        IVY -> "Ivy Wallet"
+        IVY -> "Apeiro / Ivy Wallet"
         MONEY_MANAGER -> "Money Manager"
         WALLET_BY_BUDGET_BAKERS -> "Wallet by BudgetBakers"
         SPENDEE -> "Spendee"
@@ -81,7 +81,7 @@ enum class ImportType {
     }
 
     fun appName(): String = when (this) {
-        IVY -> "Ivy Wallet"
+        IVY -> "Apeiro or Ivy Wallet"
         else -> listName()
     }
 }

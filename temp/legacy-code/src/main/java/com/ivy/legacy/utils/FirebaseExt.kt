@@ -1,6 +1,11 @@
 package com.ivy.legacy.utils
 
-import com.google.firebase.crashlytics.FirebaseCrashlytics
+import android.util.Log
+
+// Apeiro: Firebase Crashlytics was removed. These helpers now only write to the
+// local Android log (visible in Android Studio's Logcat), so nothing leaves the device.
+
+private const val TAG = "Apeiro"
 
 fun sendToCrashlytics(
     msg: String
@@ -14,11 +19,11 @@ fun Exception.sendToCrashlytics(
     clarification?.let {
         logToCrashlytics("Log: $it")
     }
-    FirebaseCrashlytics.getInstance().recordException(this)
+    Log.e(TAG, "Recorded exception", this)
 }
 
 fun logToCrashlytics(msg: String) {
-    FirebaseCrashlytics.getInstance().log(msg)
+    Log.d(TAG, msg)
 }
 
 class DeveloperException(msg: String) : Exception(msg)
