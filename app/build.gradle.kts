@@ -136,6 +136,8 @@ dependencies {
     implementation(projects.feature.onboarding)
     implementation(projects.feature.piechart)
     implementation(projects.feature.plannedPayments)
+    implementation(projects.feature.planner)
+    implementation(projects.shared.planner)
     implementation(projects.feature.poll.impl)
     implementation(projects.feature.poll.public)
     implementation(projects.feature.releases)

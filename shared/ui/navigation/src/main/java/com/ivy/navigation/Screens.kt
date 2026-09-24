@@ -145,3 +145,23 @@ data object ReleasesScreen : Screen
 data object DisclaimerScreen : Screen
 
 data object PollScreen : Screen
+// ---------------------------------------------------------------- Apeiro planner
+
+/** Day log. [epochDay] null = today. */
+data class PlannerDayScreen(val epochDay: Long? = null) : Screen
+
+/** Week log for an ISO week. Nulls = the current week. */
+data class PlannerWeekScreen(val year: Int? = null, val week: Int? = null) : Screen
+
+/** Weekly review of last week's open tasks. */
+data object PlannerReviewScreen : Screen
+
+/** Create or edit an entry, or a day of a repeating series. */
+data class PlannerEditScreen(
+    val entryId: String? = null,
+    val seriesId: String? = null,
+    val epochDay: Long? = null,
+    val kind: String = "TASK",
+) : Screen
+
+data object PlannerSearchScreen : Screen

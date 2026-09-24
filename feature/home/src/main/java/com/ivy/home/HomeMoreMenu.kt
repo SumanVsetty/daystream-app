@@ -69,6 +69,7 @@ import com.ivy.navigation.CategoriesScreen
 import com.ivy.navigation.IvyPreview
 import com.ivy.navigation.LoansScreen
 import com.ivy.navigation.PlannedPaymentsScreen
+import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.ReportScreen
 import com.ivy.navigation.SearchScreen
 import com.ivy.navigation.SettingsScreen
@@ -495,6 +496,15 @@ private fun QuickAccess(
 //        ) {
 //            ivyContext.navigateTo(Screen.Charts)
 //        }
+
+            MoreMenuButton(
+                icon = R.drawable.ic_vue_main_calendar,
+                label = "Planner"
+            ) {
+                nav.navigateTo(PlannerDayScreen())
+            }
+
+            Spacer(Modifier.weight(1f))
 
             MoreMenuButton(
                 icon = R.drawable.home_more_menu_reports,

@@ -35,6 +35,11 @@ import com.ivy.navigation.MainScreen
 import com.ivy.navigation.OnboardingScreen
 import com.ivy.navigation.PieChartStatisticScreen
 import com.ivy.navigation.PlannedPaymentsScreen
+import com.ivy.navigation.PlannerDayScreen
+import com.ivy.navigation.PlannerEditScreen
+import com.ivy.navigation.PlannerReviewScreen
+import com.ivy.navigation.PlannerSearchScreen
+import com.ivy.navigation.PlannerWeekScreen
 import com.ivy.navigation.PollScreen
 import com.ivy.navigation.ReleasesScreen
 import com.ivy.navigation.ReportScreen
@@ -46,6 +51,11 @@ import com.ivy.onboarding.OnboardingScreen
 import com.ivy.piechart.PieChartStatisticScreen
 import com.ivy.planned.edit.EditPlannedScreen
 import com.ivy.planned.list.PlannedPaymentsScreen
+import com.ivy.planner.ui.day.PlannerDayScreenImpl
+import com.ivy.planner.ui.edit.PlannerEditScreenImpl
+import com.ivy.planner.ui.review.PlannerReviewScreenImpl
+import com.ivy.planner.ui.search.PlannerSearchScreenImpl
+import com.ivy.planner.ui.week.PlannerWeekScreenImpl
 import com.ivy.poll.impl.ui.PollScreen
 import com.ivy.releases.ReleasesScreenImpl
 import com.ivy.reports.ReportScreen
@@ -88,5 +98,10 @@ fun BoxWithConstraintsScope.IvyNavGraph(screen: Screen?) {
         ReleasesScreen -> ReleasesScreenImpl()
         DisclaimerScreen -> DisclaimerScreenImpl()
         PollScreen -> PollScreen()
+        is PlannerDayScreen -> PlannerDayScreenImpl(screen = screen)
+        is PlannerWeekScreen -> PlannerWeekScreenImpl(screen = screen)
+        PlannerReviewScreen -> PlannerReviewScreenImpl()
+        is PlannerEditScreen -> PlannerEditScreenImpl(screen = screen)
+        PlannerSearchScreen -> PlannerSearchScreenImpl()
     }
 }
