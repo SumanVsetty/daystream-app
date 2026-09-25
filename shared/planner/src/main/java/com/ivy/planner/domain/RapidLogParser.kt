@@ -11,7 +11,8 @@ import java.time.temporal.TemporalAdjusters
  * Works fully offline. Recognised parts are removed from the title.
  *
  * Kind: "- " note, "o " event, otherwise a task.
- * Day: today, tonight, tomorrow, day after tomorrow, (on/next/this) monday…, 28 sep, sep 28, 28/9.
+ * Day: today, tonight, tomorrow, day after tomorrow, (on/next/this) monday…, 28 sep, sep 28, 28/9,
+ * and with a year for past or future dates: 29 oct 2010, oct 29 2010, 29/10/2010.
  * Time: 7pm, 7:30 pm, 19:30, at 19, at 7 (1–7 means pm), noon, morning, afternoon, evening.
  * Duration: for 30 min, for 1 hour, for 1.5 hours, for 45m.
  */
@@ -135,22 +136,22 @@ object RapidLogParser {
             date = weekday(today, days[m.groupValues[2].lowercase()] ?: return@take false, m.groupValues[1])
             true
         }
-        // "28 sep", "28th september", "on sep 28"
-        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+($MONTH_NAMES)\b""", o)) { m ->
+        // "28 sep", "28th september 2010", "on sep 28", "oct 29 2010" (a 4-digit year may follow)
+        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+($MONTH_NAMES)\b(?:,?\s+(\d{4})\b)?""", o)) { m ->
             val month = monthOf(m.groupValues[2]) ?: return@take false
-            date = futureDate(today, month, m.groupValues[1].toInt()) ?: return@take false
+            date = dateOf(today, month, m.groupValues[1].toInt(), m.groupValues[3]) ?: return@take false
             true
         }
-        if (date == null) take(Regex("""\s(?:on\s+)?($MONTH_NAMES)\s+(\d{1,2})(?:st|nd|rd|th)?\b""", o)) { m ->
+        if (date == null) take(Regex("""\s(?:on\s+)?($MONTH_NAMES)\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4})\b)?""", o)) { m ->
             val month = monthOf(m.groupValues[1]) ?: return@take false
-            date = futureDate(today, month, m.groupValues[2].toInt()) ?: return@take false
+            date = dateOf(today, month, m.groupValues[2].toInt(), m.groupValues[3]) ?: return@take false
             true
         }
-        // "28/9" or "28-09" (day first)
-        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})[/\-](\d{1,2})\b""")) { m ->
+        // "28/9", "28-09", "29/10/2010" (day first)
+        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{4}))?\b""")) { m ->
             val month = m.groupValues[2].toInt()
             if (month !in 1..12) return@take false
-            date = futureDate(today, Month.of(month), m.groupValues[1].toInt()) ?: return@take false
+            date = dateOf(today, Month.of(month), m.groupValues[1].toInt(), m.groupValues[3]) ?: return@take false
             true
         }
         // parts of the day, only when no clock time was given
@@ -176,6 +177,11 @@ object RapidLogParser {
     private fun weekday(today: LocalDate, dow: DayOfWeek, prefix: String): LocalDate =
         if (prefix.lowercase() == "this" && today.dayOfWeek == dow) today
         else today.with(TemporalAdjusters.next(dow))
+
+    /** An exact date when a year was typed, otherwise the next upcoming one. */
+    private fun dateOf(today: LocalDate, month: Month, day: Int, year: String): LocalDate? =
+        if (year.isNotEmpty()) runCatching { LocalDate.of(year.toInt(), month, day) }.getOrNull()
+        else futureDate(today, month, day)
 
     /** The next occurrence (today or later) of [day] [month]; next year if it has passed. */
     private fun futureDate(today: LocalDate, month: Month, day: Int): LocalDate? {

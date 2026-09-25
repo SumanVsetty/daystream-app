@@ -74,6 +74,7 @@ import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.RapidLog
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.ShortDayFmt
+import com.ivy.planner.ui.shortDay
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -232,7 +233,7 @@ private fun WeekTaskRow(task: Entry, state: WeekState, onEvent: (WeekEvent) -> U
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 state.week.days.forEach { d ->
                     DropdownMenuItem(
-                        text = { Text(d.format(ShortDayFmt)) },
+                        text = { Text(d.shortDay()) },
                         onClick = {
                             menu = false
                             onEvent(WeekEvent.AssignToDay(task.id, d))

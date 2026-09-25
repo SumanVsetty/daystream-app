@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun PlannerTimelineScreenImpl(screen: PlannerTimelineScreen) {
     val vm: JournalViewModel = screenScopedViewModel()
-    PlannerTheme { TimelineUi(vm, screen.personId, screen.collectionId) }
+    PlannerTheme { TimelineUi(vm, screen.personId, screen.collectionId, screen.importance) }
 }
 
 private enum class TypeFilter(val label: String, val kinds: Set<EntryKind>?) {
@@ -66,12 +66,14 @@ private enum class TypeFilter(val label: String, val kinds: Set<EntryKind>?) {
 }
 
 @Composable
-private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: String?) {
+private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: String?, startImportance: Int?) {
     val nav = navigation()
     val scope = rememberCoroutineScope()
     val lib by remember { vm.library.observe() }.collectAsState(initial = null)
-    var importance by remember { mutableStateOf(setOf<Int>()) }
+    var importance by remember { mutableStateOf(setOfNotNull(startImportance)) }
     var type by remember { mutableStateOf(TypeFilter.ALL) }
+    var year by remember { mutableStateOf<Int?>(null) }
+    val allMemories = personId == null && collectionId == null
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
@@ -79,12 +81,18 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
     val l = lib
     val person = personId?.let { l?.person(it) }
     val collection = collectionId?.let { l?.collection(it) }
-    val name = person?.name ?: collection?.name ?: ""
+    val name = person?.name ?: collection?.name ?: if (allMemories) "Memories" else ""
     val all = l?.entries.orEmpty().filter { e ->
-        (personId != null && personId in l?.peopleOf?.get(e.id).orEmpty()) ||
-            (collectionId != null && collectionId in l?.collectionsOf?.get(e.id).orEmpty())
+        if (allMemories) {
+            e.kind == EntryKind.JOURNAL || e.kind == EntryKind.NOTE
+        } else {
+            (personId != null && personId in l?.peopleOf?.get(e.id).orEmpty()) ||
+                (collectionId != null && collectionId in l?.collectionsOf?.get(e.id).orEmpty())
+        }
     }
+    val years = all.mapNotNull { it.date?.year }.distinct().sortedDescending()
     val shown = all
+        .filter { year == null || it.date?.year == year }
         .filter { type.kinds == null || it.kind in type.kinds!! }
         .filter { importance.isEmpty() || it.importance in importance }
         .newestFirst()
@@ -109,7 +117,7 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Box {
+                    if (!allMemories) Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
@@ -131,6 +139,17 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
                     }
                 }
             }
+            if (years.size > 1) {
+                item {
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Pill("All years", year == null, { year = null })
+                        years.forEach { y -> Pill("$y", year == y, { year = if (year == y) null else y }) }
+                    }
+                }
+            }
             item {
                 ImportanceFilter(
                     selected = importance,
@@ -141,7 +160,11 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
             if (l != null && shown.isEmpty()) {
                 item {
                     Text(
-                        if (all.isEmpty()) "Nothing here yet. Tag entries with ${name.ifBlank { "this" }} in the editor." else "No entries match these filters.",
+                        when {
+                            all.isNotEmpty() -> "No entries match these filters."
+                            allMemories -> "No memories yet."
+                            else -> "Nothing here yet. Tag entries with ${name.ifBlank { "this" }} in the editor."
+                        },
                         modifier = Modifier.padding(20.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

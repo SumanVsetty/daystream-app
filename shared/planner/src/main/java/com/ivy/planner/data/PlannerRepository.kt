@@ -221,6 +221,8 @@ class PlannerRepository @Inject constructor(
 
     suspend fun getSeries(id: String): Series? = seriesDao.findById(id)?.toDomain()
 
+    fun observeSeries(): Flow<List<Series>> = seriesDao.observeAll().map { list -> list.mapNotNull { it.toDomain() } }
+
     /** Creates or replaces a series as a whole (new series, or pause/resume). */
     suspend fun saveSeries(series: Series) {
         val existing = seriesDao.findById(series.id)

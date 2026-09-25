@@ -108,4 +108,15 @@ class RapidLogParserTest {
         TagMatch.find("CAR", cs)?.id shouldBe "2"
         TagMatch.find("house", cs) shouldBe null
     }
+
+    @Test
+    fun `dates with a year, including the past`() {
+        p("moved to Bengaluru on 29 oct 2010").let {
+            it.date shouldBe LocalDate.of(2010, 10, 29)
+            it.title shouldBe "moved to Bengaluru"
+        }
+        p("wedding oct 29 2010").date shouldBe LocalDate.of(2010, 10, 29)
+        p("bought the car 25/10/2019").date shouldBe LocalDate.of(2019, 10, 25)
+        p("renew licence 1/1/2030").date shouldBe LocalDate.of(2030, 1, 1)
+    }
 }

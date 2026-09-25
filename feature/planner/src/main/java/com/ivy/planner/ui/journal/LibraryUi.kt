@@ -69,7 +69,22 @@ fun LazyListScope.libraryTimeline(
     hideCollectionId: String? = null,
 ) {
     val byDay = entries.groupBy { it.date }
+    // year headings once the timeline reaches beyond the current year
+    val showYears = entries.any { e -> e.date?.let { it.year != java.time.LocalDate.now().year } == true }
+    var lastYear: Int? = null
     byDay.forEach { (date, dayEntries) ->
+        val year = date?.year
+        if (showYears && year != null && year != lastYear) {
+            lastYear = year
+            item(key = "y:$year") {
+                Text(
+                    "$year",
+                    modifier = Modifier.padding(start = 20.dp, top = 18.dp, bottom = 2.dp),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+            }
+        }
         item(key = "d:${date ?: "none"}") {
             Box(Modifier.padding(start = 20.dp, top = 14.dp, bottom = 2.dp)) {
                 SectionLabel(date?.withWeek() ?: "No date", MaterialTheme.colorScheme.onSurfaceVariant)

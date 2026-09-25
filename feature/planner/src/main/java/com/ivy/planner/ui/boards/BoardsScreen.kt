@@ -68,9 +68,10 @@ import com.ivy.planner.ui.journal.NameDialog
 import com.ivy.planner.ui.journal.openEntry
 import com.ivy.planner.ui.journal.toggleEntry
 import com.ivy.planner.ui.label
+import com.ivy.planner.ui.shortDay
 import com.ivy.planner.ui.timelineColor
-import kotlinx.coroutines.launch
 import java.time.LocalDate
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlannerBoardsScreenImpl(screen: PlannerBoardsScreen) {
@@ -271,7 +272,7 @@ private fun BoardRow(
             title = e.title,
             description = e.description,
             meta = listOfNotNull(
-                e.date?.let { if (it == today) "Today" else it.format(ShortDayFmt) },
+                e.date?.let { if (it == today) "Today" else it.shortDay() },
                 if (late) "overdue" else null,
             ).joinToString(" · "),
             state = e.state,

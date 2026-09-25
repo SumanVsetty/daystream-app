@@ -31,8 +31,12 @@ internal val TimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 internal val DayTitleFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMM", Locale.ENGLISH)
 internal val ShortDayFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
 
-/** "W39 · Thu 24 Sep" */
-internal fun LocalDate.withWeek(): String = "W${isoWeek().week} · ${format(ShortDayFmt)}"
+/** "W39 · Thu 24 Sep", with the year when it isn't this year: "W43 · Fri 29 Oct 2010". */
+internal fun LocalDate.withWeek(): String = "W${isoWeek().week} · ${shortDay()}"
+
+/** "Thu 24 Sep", or "Fri 29 Oct 2010" outside the current year. */
+internal fun LocalDate.shortDay(): String =
+    format(ShortDayFmt) + if (year != LocalDate.now().year) " $year" else ""
 
 internal fun LocalTime.label(): String = format(TimeFmt)
 

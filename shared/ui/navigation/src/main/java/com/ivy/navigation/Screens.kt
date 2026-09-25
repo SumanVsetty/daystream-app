@@ -169,5 +169,12 @@ data object PlannerSearchScreen : Screen
 /** Boards (Taskito-style task collections). [boardId] null = the first board. */
 data class PlannerBoardsScreen(val boardId: String? = null) : Screen
 
-/** The timeline of one person or one collection (Car, House, Suchet · School…). */
-data class PlannerTimelineScreen(val personId: String? = null, val collectionId: String? = null) : Screen
+/**
+ * The timeline of one person or one collection (Car, House, TEDLinx…), or with neither,
+ * all journal memories. [importance] pre-selects an importance level.
+ */
+data class PlannerTimelineScreen(
+    val personId: String? = null,
+    val collectionId: String? = null,
+    val importance: Int? = null,
+) : Screen
