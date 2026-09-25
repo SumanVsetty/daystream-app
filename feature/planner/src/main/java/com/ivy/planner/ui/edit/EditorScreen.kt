@@ -2,6 +2,7 @@ package com.ivy.planner.ui.edit
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,9 +19,12 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -85,6 +89,7 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
     var repeatMenu by remember { mutableStateOf(false) }
     var customRepeat by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var durationMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -151,10 +156,34 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    FieldRow(Icons.Outlined.Schedule, "Time", state.time?.label() ?: "No time") { pickTime = true }
+                    FieldRow(
+                        Icons.Outlined.Schedule,
+                        "Time",
+                        state.time?.label() ?: when (state.kind) {
+                            EntryKind.TASK -> "Auto · next free slot"
+                            EntryKind.EVENT -> "All day"
+                            else -> "Now"
+                        },
+                    ) { pickTime = true }
                 }
                 if (state.time != null) {
                     TextButton(onClick = { onEvent(EditorEvent.SetTime(null)) }) { Text("Clear") }
+                }
+            }
+            if (state.kind == EntryKind.TASK || state.kind == EntryKind.EVENT) {
+                Box {
+                    FieldRow(Icons.Outlined.Timer, "Duration", durationLabel(state.durationMinutes)) { durationMenu = true }
+                    DropdownMenu(expanded = durationMenu, onDismissRequest = { durationMenu = false }) {
+                        listOf(15, 30, 45, 60, 90, 120).forEach { m ->
+                            DropdownMenuItem(
+                                text = { Text(durationLabel(m)) },
+                                onClick = {
+                                    durationMenu = false
+                                    onEvent(EditorEvent.SetDuration(m))
+                                },
+                            )
+                        }
+                    }
                 }
             }
             if (state.kind == EntryKind.TASK || state.kind == EntryKind.EVENT) {
@@ -304,4 +333,10 @@ private fun ScopeOption(title: String, sub: String, onClick: () -> Unit) {
         Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
         Text(sub, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+private fun durationLabel(minutes: Int): String = when {
+    minutes < 60 -> "$minutes min"
+    minutes % 60 == 0 -> "${minutes / 60} h"
+    else -> "${minutes / 60} h ${minutes % 60} min"
 }

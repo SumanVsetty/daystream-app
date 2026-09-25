@@ -24,14 +24,14 @@ class PlannerTest {
     }
 
     @Test
-    fun `day items merge one-offs and occurrences, sorted by time with untimed last`() {
+    fun `day items merge one-offs and occurrences, all-day first then by time`() {
         val entries = listOf(
             Entry("e1", EntryKind.TASK, "HAL HYD A818 bid", date = today, time = LocalTime.of(10, 0)),
             Entry("e2", EntryKind.EVENT, "Birthday", date = today),
             Entry("e3", EntryKind.TASK, "Dropped", date = today, state = EntryState.DROPPED),
         )
         val items = Planner.dayItems(today, today, entries, listOf(daily), emptyMap())
-        items.map { it.title } shouldBe listOf("HAL HYD A818 bid", "Daily Followup", "Birthday")
+        items.map { it.title } shouldBe listOf("Birthday", "HAL HYD A818 bid", "Daily Followup")
     }
 
     @Test

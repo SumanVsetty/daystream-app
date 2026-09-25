@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
+import com.ivy.planner.domain.RapidLogParser
 import com.ivy.planner.domain.isoWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -110,14 +112,15 @@ fun EntryLeading(kind: EntryKind, state: EntryState, onToggle: () -> Unit) {
             Icon(Icons.Outlined.CalendarToday, contentDescription = "Event", tint = PlannerColors.Event, modifier = Modifier.size(20.dp))
         }
         EntryKind.NOTE, EntryKind.JOURNAL -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Text("–", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(Modifier.size(9.dp).clip(CircleShape).background(PlannerColors.Done))
         }
     }
 }
 
 /** The colour of an entry's timeline segment. */
 @Composable
-fun timelineColor(kind: EntryKind, state: EntryState): Color = when {
+fun timelineColor(kind: EntryKind, state: EntryState, isMoney: Boolean = false): Color = when {
+    isMoney -> PlannerColors.Accent
     kind == EntryKind.EVENT -> PlannerColors.Event
     kind == EntryKind.NOTE || kind == EntryKind.JOURNAL -> MaterialTheme.colorScheme.outlineVariant
     state == EntryState.MISSED || state == EntryState.SKIPPED -> MaterialTheme.colorScheme.outlineVariant
@@ -140,6 +143,9 @@ fun EntryRow(
     onClick: () -> Unit,
     lineAbove: Color? = null,
     lineBelow: Color? = null,
+    moneyLabel: String? = null,
+    moneyIsIncome: Boolean = false,
+    dimmed: Boolean = false,
 ) {
     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -148,7 +154,8 @@ fun EntryRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .alpha(if (dimmed) 0.5f else 1f),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
@@ -164,7 +171,7 @@ fun EntryRow(
                 },
             contentAlignment = Alignment.TopCenter,
         ) {
-            EntryLeading(kind, state, onToggle)
+            if (moneyLabel != null) MoneyBadge(moneyIsIncome) else EntryLeading(kind, state, onToggle)
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f).padding(top = 8.dp, end = 8.dp, bottom = 16.dp)) {
@@ -195,6 +202,46 @@ fun EntryRow(
                 }
             }
         }
+        if (moneyLabel != null) {
+            Text(
+                moneyLabel,
+                modifier = Modifier.padding(top = 10.dp, end = 12.dp),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (moneyIsIncome) PlannerColors.Done else PlannerColors.Accent,
+            )
+        }
+    }
+}
+
+/** ₹ badge for expenses (peach) and income (mint). */
+@Composable
+fun MoneyBadge(isIncome: Boolean) {
+    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(if (isIncome) PlannerColors.Done else PlannerColors.Accent),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("₹", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = if (isIncome) PlannerColors.OnDone else PlannerColors.OnAccent)
+        }
+    }
+}
+
+/** The thin "Now 14:20" line across the timeline. */
+@Composable
+fun NowMarker(label: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(PlannerColors.Accent))
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PlannerColors.Accent)
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f).height(1.5.dp).background(PlannerColors.Accent.copy(alpha = 0.6f)))
     }
 }
 
@@ -350,49 +397,61 @@ fun MonthCalendar(
 }
 
 /**
- * Rapid log: type a line and press enter. It's always a task, unless the line starts
- * with a bullet-journal symbol: "- " for a note, "o " for an event.
- * The kind can be changed later in the editor.
+ * Rapid log: type a line and press enter. Understands day, time and duration
+ * (see RapidLogParser); a small hint shows what it understood, only while it understood something.
  */
-fun parseRapidLog(text: String): Pair<EntryKind, String> {
-    val t = text.trim()
-    return when {
-        t.startsWith("- ") || t.startsWith("– ") -> EntryKind.NOTE to t.drop(2).trim()
-        t.startsWith("o ") || t.startsWith("○ ") -> EntryKind.EVENT to t.drop(2).trim()
-        else -> EntryKind.TASK to t
-    }
-}
-
 @Composable
 fun RapidLog(
     placeholder: String,
-    onSubmit: (EntryKind, String) -> Unit,
+    today: LocalDate,
+    onSubmit: (String) -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
+    val parsed = remember(text, today) { RapidLogParser.parse(text, today) }
     val submit = {
-        val (kind, title) = parseRapidLog(text)
-        if (title.isNotBlank()) {
-            onSubmit(kind, title)
+        if (parsed.title.isNotBlank()) {
+            onSubmit(text)
             text = ""
         }
     }
-    OutlinedTextField(
-        value = text,
-        onValueChange = { text = it },
-        modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-        singleLine = true,
-        shape = RoundedCornerShape(14.dp),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { submit() }),
-        trailingIcon = {
-            if (text.isNotBlank()) {
-                IconButton(onClick = submit) {
-                    Icon(Icons.Filled.Check, contentDescription = "Add", tint = PlannerColors.Done)
+    Column(Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
+            trailingIcon = {
+                if (text.isNotBlank()) {
+                    IconButton(onClick = submit) {
+                        Icon(Icons.Filled.Check, contentDescription = "Add", tint = PlannerColors.Done)
+                    }
                 }
-            }
-        },
-    )
+            },
+        )
+        val hint = listOfNotNull(
+            when (parsed.kind) {
+                EntryKind.NOTE -> "Note"
+                EntryKind.EVENT -> "Event"
+                else -> null
+            },
+            parsed.date?.let { if (it == today) "Today" else if (it == today.plusDays(1)) "Tomorrow" else it.withWeek() },
+            parsed.time?.label(),
+            parsed.durationMinutes?.let { "$it min" },
+        )
+        if (text.isNotBlank() && hint.isNotEmpty()) {
+            Text(
+                hint.joinToString(" · "),
+                modifier = Modifier.padding(start = 14.dp, top = 4.dp),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = PlannerColors.Accent,
+            )
+        }
+    }
 }
 
 @Composable

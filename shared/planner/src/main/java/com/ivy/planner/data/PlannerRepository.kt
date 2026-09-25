@@ -1,10 +1,14 @@
 package com.ivy.planner.data
 
+import com.ivy.planner.domain.AutoTime
+import com.ivy.planner.domain.DayItem
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
 import com.ivy.planner.domain.IsoWeek
 import com.ivy.planner.domain.OccurrenceRecord
+import com.ivy.planner.domain.Planner
+import com.ivy.planner.domain.RapidLogParser
 import com.ivy.planner.domain.RepeatCodec
 import com.ivy.planner.domain.RepeatEnd
 import com.ivy.planner.domain.Series
@@ -70,6 +74,7 @@ class PlannerRepository @Inject constructor(
         week: IsoWeek? = date?.isoWeek(),
         time: LocalTime? = null,
         description: String = "",
+        durationMinutes: Int? = null,
     ): String {
         val id = newId()
         val entry = Entry(
@@ -78,11 +83,60 @@ class PlannerRepository @Inject constructor(
             title = title.trim(),
             description = description,
             date = date,
-            time = time,
+            time = time ?: defaultTime(kind, date, durationMinutes, excludeId = id),
             week = week,
+            durationMinutes = durationMinutes,
         )
         entryDao.upsert(entry.toEntity(createdAt = now(), now = now()))
         return id
+    }
+
+    /**
+     * Rapid log: understands day, time and duration in the text (see [RapidLogParser]).
+     * Without a day it goes on [selectedDate].
+     */
+    suspend fun rapidLog(text: String, selectedDate: LocalDate): String? {
+        val parsed = RapidLogParser.parse(text, LocalDate.now())
+        if (parsed.title.isBlank()) return null
+        return quickAdd(
+            kind = parsed.kind,
+            title = parsed.title,
+            date = parsed.date ?: selectedDate,
+            time = parsed.time,
+            durationMinutes = parsed.durationMinutes,
+        )
+    }
+
+    /**
+     * The time a new entry gets when none was given:
+     * tasks take the earliest free slot (08:00–24:00, from now if today),
+     * notes on today take the current time, events stay all-day.
+     */
+    private suspend fun defaultTime(kind: EntryKind, date: LocalDate?, durationMinutes: Int?, excludeId: String?): LocalTime? {
+        if (date == null) return null
+        return when (kind) {
+            EntryKind.TASK -> autoTime(date, durationMinutes ?: AutoTime.DEFAULT_DURATION, excludeId)
+            EntryKind.NOTE, EntryKind.JOURNAL ->
+                if (date == LocalDate.now()) LocalTime.now().withSecond(0).withNano(0) else null
+            EntryKind.EVENT -> null
+        }
+    }
+
+    /** Earliest free slot on [date] given every timed task, event and repeating task that day. */
+    suspend fun autoTime(date: LocalDate, durationMinutes: Int = AutoTime.DEFAULT_DURATION, excludeId: String? = null): LocalTime {
+        val today = LocalDate.now()
+        val busy = mutableListOf<AutoTime.Busy>()
+        entryDao.onDate(date.toEpochDay())
+            .map { it.toDomain() }
+            .filter { it.id != excludeId && it.time != null && it.state != EntryState.DROPPED }
+            .filter { it.kind == EntryKind.TASK || it.kind == EntryKind.EVENT }
+            .forEach { busy += AutoTime.Busy(it.time!!, it.durationMinutes ?: AutoTime.DEFAULT_DURATION) }
+        val series = seriesDao.all().mapNotNull { it.toDomain() }.filter { it.id != excludeId }
+        val records = occurrenceDao.since(date.toEpochDay()).map { it.toDomain() }.groupBy { it.seriesId }
+        Planner.dayItems(date, today, emptyList(), series, records)
+            .filterIsInstance<DayItem.Occurrence>()
+            .forEach { o -> o.sortTime?.let { busy += AutoTime.Busy(it, o.series.durationMinutes ?: AutoTime.DEFAULT_DURATION) } }
+        return AutoTime.assign(date, today, LocalTime.now(), busy, durationMinutes)
     }
 
     suspend fun getEntry(id: String): Entry? = entryDao.findById(id)?.toDomain()
@@ -90,7 +144,8 @@ class PlannerRepository @Inject constructor(
     suspend fun saveEntry(entry: Entry) {
         val existing = entryDao.findById(entry.id)
         val week = entry.date?.isoWeek() ?: entry.week
-        entryDao.upsert(entry.copy(week = week).toEntity(createdAt = existing?.createdAt ?: now(), now = now()))
+        val time = entry.time ?: defaultTime(entry.kind, entry.date, entry.durationMinutes, excludeId = entry.id)
+        entryDao.upsert(entry.copy(week = week, time = time).toEntity(createdAt = existing?.createdAt ?: now(), now = now()))
     }
 
     suspend fun setState(id: String, state: EntryState) {
@@ -113,11 +168,20 @@ class PlannerRepository @Inject constructor(
         val wasPast = e.date != null && e.date < today.toEpochDay()
         val wasOtherWeek = e.date == null && e.weekYear != null &&
             IsoWeek(e.weekYear, e.weekNum ?: 0) < today.isoWeek()
+        // a task moved to a day gets a fresh free slot; a week-level task has no time
+        val newTime = if (date != null && e.kind == EntryKind.TASK.name) {
+            autoTime(date, e.durationMinutes ?: AutoTime.DEFAULT_DURATION, excludeId = id).toMinutes()
+        } else if (date == null) {
+            null
+        } else {
+            e.timeMinutes
+        }
         entryDao.upsert(
             e.copy(
                 date = date?.toEpochDay(),
                 weekYear = week?.year,
                 weekNum = week?.week,
+                timeMinutes = newTime,
                 migrationCount = e.migrationCount + if (wasPast || wasOtherWeek) 1 else 0,
                 updatedAt = now(),
             ),
@@ -141,7 +205,22 @@ class PlannerRepository @Inject constructor(
     /** Creates or replaces a series as a whole (new series, or pause/resume). */
     suspend fun saveSeries(series: Series) {
         val existing = seriesDao.findById(series.id)
-        seriesDao.upsert(series.toEntity(createdAt = existing?.createdAt ?: now(), now = now()))
+        val time = series.time ?: if (series.kind == EntryKind.TASK) {
+            autoTime(series.schedule.start, series.durationMinutes ?: AutoTime.DEFAULT_DURATION, excludeId = series.id)
+        } else {
+            null
+        }
+        seriesDao.upsert(series.copy(time = time).toEntity(createdAt = existing?.createdAt ?: now(), now = now()))
+    }
+
+    // ---------------------------------------------------------------- reminders
+
+    suspend fun reminders(ownerId: String): List<Int> = db.reminderDao().forOwner(ownerId).map { it.minutesBefore }
+
+    /** Replaces the reminders of an entry or series ([minutesBefore]: 0 = at the time). */
+    suspend fun setReminders(ownerId: String, minutesBefore: List<Int>) {
+        db.reminderDao().deleteForOwner(ownerId)
+        minutesBefore.distinct().forEach { db.reminderDao().upsert(ReminderEntity(newId(), ownerId, it)) }
     }
 
     /**

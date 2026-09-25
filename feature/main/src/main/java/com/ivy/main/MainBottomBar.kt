@@ -8,12 +8,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -40,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
@@ -87,13 +91,17 @@ fun BoxWithConstraintsScope.BottomBar(
     onAddExpense: () -> Unit,
     onAddTransfer: () -> Unit,
     onAddPlannedPayment: () -> Unit,
-    onAddPlannerEntry: () -> Unit,
+    /** Opens the planner editor for "TASK", "EVENT" or "NOTE". */
+    onAddPlannerEntry: (String) -> Unit,
 
     showAddAccountModal: () -> Unit,
 ) {
     val ivyContext = ivyWalletCtx()
 
     var expanded by remember { mutableStateOf(false) }
+    var plannerMenu by remember { mutableStateOf(false) }
+    val plannerModalId = remember { UUID.randomUUID() }
+    AddModalBackHandling(modalId = plannerModalId, visible = plannerMenu) { plannerMenu = false }
 
     val modalId = remember { UUID.randomUUID() }
 
@@ -212,7 +220,8 @@ fun BoxWithConstraintsScope.BottomBar(
     }
     // Apeiro logo (home, collapsed) / + / x button
     val isPlannerTab = tab == MainTab.DAY || tab == MainTab.WEEK
-    val showLogo = (tab == MainTab.HOME || isPlannerTab) && !expanded
+    if (!isPlannerTab) plannerMenu = false
+    val showLogo = (tab == MainTab.HOME || isPlannerTab) && !expanded && !plannerMenu
     val logoBorderColor = UI.colors.medium
     IvyCircleButton(
         modifier = Modifier
@@ -229,7 +238,7 @@ fun BoxWithConstraintsScope.BottomBar(
             .thenIf(showLogo) {
                 border(1.dp, logoBorderColor, CircleShape)
             }
-            .rotate(if (showLogo) 0f else fabRotation)
+            .rotate(if (plannerMenu) 45f else if (showLogo) 0f else fabRotation)
             .zIndex(200f)
             .thenIf(tab == MainTab.HOME) {
                 pointerInput(Unit) {
@@ -276,7 +285,7 @@ fun BoxWithConstraintsScope.BottomBar(
         backgroundPadding = 8.dp,
         icon = if (showLogo) R.drawable.ic_apeiro_logo else R.drawable.ic_add,
         backgroundGradient = when (tab) {
-            MainTab.DAY, MainTab.WEEK -> Gradient.solid(White)
+            MainTab.DAY, MainTab.WEEK -> if (plannerMenu) Gradient.solid(UI.colors.gray) else Gradient.solid(White)
             MainTab.HOME -> {
                 if (!expanded) Gradient.solid(White) else Gradient.solid(UI.colors.gray)
             }
@@ -289,7 +298,7 @@ fun BoxWithConstraintsScope.BottomBar(
         tint = if (showLogo) Color.Unspecified else White
     ) {
         when (tab) {
-            MainTab.DAY, MainTab.WEEK -> onAddPlannerEntry()
+            MainTab.DAY, MainTab.WEEK -> plannerMenu = !plannerMenu
             MainTab.HOME -> {
                 expanded = !expanded
             }
@@ -298,6 +307,16 @@ fun BoxWithConstraintsScope.BottomBar(
                 showAddAccountModal()
             }
         }
+    }
+
+    if (plannerMenu) {
+        PlannerAddMenu(
+            onPick = { kind ->
+                plannerMenu = false
+                if (kind == "EXPENSE") onAddExpense() else onAddPlannerEntry(kind)
+            },
+            onDismiss = { plannerMenu = false },
+        )
     }
 }
 
@@ -678,5 +697,54 @@ private fun RowScope.Tab(
                 )
             )
         }
+    }
+}
+
+/** Planner add menu: Task on top, then Event, Note and Expense, in the wallet's style. */
+@Composable
+private fun BoxWithConstraintsScope.PlannerAddMenu(
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .zIndex(150f)
+            .background(UI.colors.pure.copy(alpha = 0.92f))
+            .clickableNoIndication(rememberInteractionSource()) { onDismiss() },
+    ) {
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 120.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            PlannerAddButton("Task", Color(0xFF8FD4A3), Color(0xFF0F2A18), "✓") { onPick("TASK") }
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                PlannerAddButton("Event", Color(0xFF9DBBEF), Color(0xFF132238), "▦") { onPick("EVENT") }
+                PlannerAddButton("Note", Color(0xFFE4E6E1), Color(0xFF1B1D1B), "•") { onPick("NOTE") }
+                PlannerAddButton("Expense", Color(0xFFF2A48C), Color(0xFF3A1D14), "₹") { onPick("EXPENSE") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlannerAddButton(label: String, color: Color, onColor: Color, glyph: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(color)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(glyph, color = onColor, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(label.uppercase(), color = UI.colors.pureInverse, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
     }
 }

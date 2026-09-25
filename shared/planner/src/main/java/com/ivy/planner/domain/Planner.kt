@@ -38,6 +38,8 @@ data class Entry(
     val migrationCount: Int = 0,
     val collectionId: String? = null,
     val completedAt: Long? = null,
+    /** Null means the default of [AutoTime.DEFAULT_DURATION] minutes. */
+    val durationMinutes: Int? = null,
 )
 
 /** A repeating task or routine: the "master" that owns the schedule. */
@@ -51,6 +53,7 @@ data class Series(
     val collectionId: String? = null,
     val paused: Boolean = false,
     val stepCount: Int = 0,
+    val durationMinutes: Int? = null,
 )
 
 /**
@@ -135,7 +138,7 @@ object Planner {
             }
         }
         return (singles + occurrences).sortedWith(
-            compareBy<DayItem>({ it.sortTime == null }, { it.sortTime }, { it.title.lowercase() }),
+            compareBy<DayItem>({ it.sortTime != null }, { it.sortTime }, { it.title.lowercase() }),
         )
     }
 

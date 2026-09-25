@@ -35,6 +35,7 @@ data class EntryEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "completed_at") val completedAt: Long? = null,
+    @ColumnInfo(name = "duration_minutes") val durationMinutes: Int? = null,
 )
 
 /** Full-text search index over entries (title and description). */
@@ -63,6 +64,7 @@ data class SeriesEntity(
     @ColumnInfo(name = "is_routine") val isRoutine: Boolean = false,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "duration_minutes") val durationMinutes: Int? = null,
 )
 
 /** One day of a series, stored only when something happened or it was edited "only today". */
@@ -198,4 +200,17 @@ data class ReadingEntity(
     val value: Double,
     @ColumnInfo(name = "measured_at") val measuredAt: Long,
     val note: String = "",
+)
+
+/**
+ * A reminder for an entry or a series: [minutesBefore] its time (0 = at the time).
+ * An owner can have several reminders.
+ */
+@Serializable
+@Entity(tableName = "reminders", indices = [Index("owner_id")])
+data class ReminderEntity(
+    @PrimaryKey val id: String,
+    /** An entry id or a series id. */
+    @ColumnInfo(name = "owner_id") val ownerId: String,
+    @ColumnInfo(name = "minutes_before") val minutesBefore: Int,
 )

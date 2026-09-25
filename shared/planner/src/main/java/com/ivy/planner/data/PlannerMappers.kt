@@ -30,6 +30,7 @@ fun EntryEntity.toDomain(): Entry = Entry(
     importance = importance,
     migrationCount = migrationCount,
     completedAt = completedAt,
+    durationMinutes = durationMinutes,
 )
 
 fun Entry.toEntity(createdAt: Long, now: Long): EntryEntity = EntryEntity(
@@ -47,6 +48,7 @@ fun Entry.toEntity(createdAt: Long, now: Long): EntryEntity = EntryEntity(
     createdAt = createdAt,
     updatedAt = now,
     completedAt = completedAt,
+    durationMinutes = durationMinutes,
 )
 
 fun SeriesEntity.toDomain(): Series? {
@@ -59,6 +61,7 @@ fun SeriesEntity.toDomain(): Series? {
         time = timeMinutes?.toLocalTime(),
         schedule = RepeatSchedule(rule, startDate.toLocalDate(), RepeatCodec.decodeEnd(endRule)),
         paused = paused,
+        durationMinutes = durationMinutes,
     )
 }
 
@@ -75,6 +78,7 @@ fun Series.toEntity(createdAt: Long, now: Long, isRoutine: Boolean = false): Ser
     isRoutine = isRoutine,
     createdAt = createdAt,
     updatedAt = now,
+    durationMinutes = durationMinutes,
 )
 
 fun OccurrenceEntity.toDomain(): OccurrenceRecord = OccurrenceRecord(

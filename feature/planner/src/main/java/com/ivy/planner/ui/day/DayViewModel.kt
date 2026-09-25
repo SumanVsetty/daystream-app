@@ -4,20 +4,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewModelScope
+import com.ivy.planner.data.PlannerPrefs
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.data.PlannerSnapshot
+import com.ivy.planner.domain.AutoTime
 import com.ivy.planner.domain.DayItem
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
 import com.ivy.planner.domain.Planner
 import com.ivy.planner.domain.isoWeek
+import com.ivy.planner.ui.MoneyItem
+import com.ivy.planner.ui.MoneySource
 import com.ivy.planner.ui.PlannerColors
+import com.ivy.planner.ui.PlannerSelection
 import com.ivy.planner.ui.label
 import com.ivy.planner.ui.withWeek
 import com.ivy.ui.ComposeViewModel
@@ -30,6 +37,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalTime
 import javax.inject.Inject
 
 /** A row on the Day log, ready to display. */
@@ -46,6 +54,11 @@ data class DayRow(
     val entryId: String?,
     val seriesId: String?,
     val date: LocalDate,
+    val time: LocalTime?,
+    /** Expense or income from the money side (read-only here). */
+    val money: MoneyItem? = null,
+    /** Softened: before "now" today and nothing left to do. */
+    val dimmed: Boolean = false,
 )
 
 @Immutable
@@ -56,59 +69,102 @@ data class DayState(
     val rows: ImmutableList<DayRow>,
     val overdue: ImmutableList<Entry>,
     val dots: ImmutableMap<LocalDate, Color>,
+    val todoOnly: Boolean,
+    /** Index in [rows] before which the "now" marker goes (today only). */
+    val nowIndex: Int?,
+    val nowLabel: String,
+    /** Index in [rows] to scroll to when opening today (one hour before now). */
+    val scrollIndex: Int?,
 )
 
 sealed interface DayEvent {
     data class SelectDate(val date: LocalDate) : DayEvent
     data class Toggle(val row: DayRow) : DayEvent
-    data class QuickAdd(val kind: EntryKind, val title: String) : DayEvent
+    data class RapidLog(val text: String) : DayEvent
     data class OverdueDone(val id: String) : DayEvent
     data class OverdueMove(val id: String, val date: LocalDate) : DayEvent
     data class OverdueDrop(val id: String) : DayEvent
+    data object ToggleFilter : DayEvent
+    /** Reload expenses (e.g. after returning from the money screens). */
+    data object Refresh : DayEvent
 }
 
 @HiltViewModel
 class DayViewModel @Inject constructor(
     private val repository: PlannerRepository,
+    private val moneySource: MoneySource,
+    private val prefs: PlannerPrefs,
 ) : ComposeViewModel<DayState, DayEvent>() {
 
-    private var selected by mutableStateOf(LocalDate.now())
+    private var selected by mutableStateOf(PlannerSelection.date)
+    private var todoOnly by mutableStateOf(prefs.todoOnly)
+    private var refresh by mutableIntStateOf(0)
 
     @Composable
     override fun uiState(): DayState {
         val today = LocalDate.now()
+        val now = LocalTime.now()
         val date = selected
         val week = date.isoWeek()
         val snapshot by remember(week, today) {
             repository.observe(week.monday, week.sunday, today, week)
         }.collectAsState(initial = null)
+        val money by produceState(initialValue = emptyList<MoneyItem>(), week, refresh) {
+            value = moneySource.between(week.monday, week.sunday)
+        }
 
-        val s = snapshot ?: return DayState(date, today, "", persistentListOf(), persistentListOf(), persistentMapOf())
-        val items = itemsFor(s, date, today)
-        val rows = items.map { it.toRow(s, today) }
-        val open = rows.count { it.kind == EntryKind.TASK && it.state == EntryState.OPEN }
-        val done = rows.count { it.state == EntryState.DONE }
+        val s = snapshot ?: return DayState(
+            date, today, "", persistentListOf(), persistentListOf(), persistentMapOf(),
+            todoOnly, null, "", null,
+        )
+        val allRows = (itemsFor(s, date, today).map { it.toRow(s, today) } + money.filter { it.date == date }.map { it.toRow() })
+            .sortedWith(compareBy<DayRow>({ it.time != null }, { it.time }, { it.title.lowercase() }))
+        val isToday = date == today
+        val visible = if (todoOnly) allRows.filter { it.isToDo(isToday, now) } else allRows
+        val rows = visible.map { row ->
+            row.copy(dimmed = isToday && row.time != null && row.time < now && !row.isOpenTask())
+        }
+        val open = allRows.count { it.isOpenTask() }
+        val done = allRows.count { it.state == EntryState.DONE }
+        val nowIndex = if (isToday) rows.indexOfFirst { it.time != null && it.time >= now }.let { if (it < 0) rows.size else it } else null
+        val oneHourAgo = now.minusHours(1).takeIf { now.hour >= 1 } ?: LocalTime.MIDNIGHT
+        val scrollIndex = if (isToday) rows.indexOfFirst { it.time != null && it.time >= oneHourAgo }.takeIf { it > 0 } else null
         return DayState(
             date = date,
             today = today,
             summary = "$open open · $done done",
             rows = rows.toImmutableList(),
-            overdue = (if (date == today) s.overdue else emptyList()).toImmutableList(),
+            overdue = (if (isToday) s.overdue else emptyList()).toImmutableList(),
             dots = week.days.mapNotNull { d -> dotFor(itemsFor(s, d, today), d, today)?.let { d to it } }
                 .toMap().toImmutableMap(),
+            todoOnly = todoOnly,
+            nowIndex = nowIndex,
+            nowLabel = "Now ${now.label()}",
+            scrollIndex = scrollIndex,
         )
+    }
+
+    private fun DayRow.isOpenTask() =
+        money == null && kind == EntryKind.TASK && state == EntryState.OPEN
+
+    /** "To do": open tasks, and events still ahead (or all-day). */
+    private fun DayRow.isToDo(isToday: Boolean, now: LocalTime): Boolean = when {
+        money != null -> false
+        kind == EntryKind.TASK -> state == EntryState.OPEN
+        kind == EntryKind.EVENT -> !isToday || time == null || time >= now
+        else -> false
     }
 
     private fun itemsFor(s: PlannerSnapshot, date: LocalDate, today: LocalDate): List<DayItem> =
         Planner.dayItems(date, today, s.entries, s.series, s.records)
 
     private fun dotFor(items: List<DayItem>, day: LocalDate, today: LocalDate): Color? {
-        val states = items.map {
+        val states = items.mapNotNull {
             when (it) {
                 is DayItem.Single -> if (it.entry.kind == EntryKind.TASK) it.entry.state else null
                 is DayItem.Occurrence -> it.state
             }
-        }.filterNotNull()
+        }
         if (states.isEmpty()) return if (items.isNotEmpty()) PlannerColors.Missed else null
         return when {
             !day.isBefore(today) -> PlannerColors.Missed
@@ -116,6 +172,8 @@ class DayViewModel @Inject constructor(
             else -> PlannerColors.Accent
         }
     }
+
+    private fun duration(minutes: Int?) = "${minutes ?: AutoTime.DEFAULT_DURATION} min"
 
     private fun DayItem.toRow(s: PlannerSnapshot, today: LocalDate): DayRow = when (this) {
         is DayItem.Single -> DayRow(
@@ -125,6 +183,7 @@ class DayViewModel @Inject constructor(
             description = entry.description,
             meta = listOfNotNull(
                 entry.time?.label(),
+                if (entry.kind == EntryKind.TASK && entry.time != null) duration(entry.durationMinutes) else null,
                 if (entry.kind == EntryKind.EVENT && entry.time == null) "All day" else null,
                 if (entry.migrationCount > 0) "migrated ${entry.migrationCount}×" else null,
             ).joinToString(" · "),
@@ -133,6 +192,7 @@ class DayViewModel @Inject constructor(
             entryId = entry.id,
             seriesId = null,
             date = entry.date ?: today,
+            time = entry.time,
         )
         is DayItem.Occurrence -> {
             val consistency = Planner.consistency(series, s.records[series.id].orEmpty(), today)
@@ -143,28 +203,46 @@ class DayViewModel @Inject constructor(
                 description = description,
                 meta = listOfNotNull(
                     sortTime?.label(),
-                    repositoryDescribe(this),
+                    if (series.kind == EntryKind.TASK && sortTime != null) duration(series.durationMinutes) else null,
+                    repository.describe(series).replaceFirstChar { it.lowercase() },
                     dueSince?.let { "due since ${it.withWeek()}" },
                     if (state == EntryState.MISSED) "missed" else null,
-                    if (consistency.scheduled > 0) "done ${consistency.done} of last ${consistency.scheduled}" else null,
+                    if (consistency.scheduled > 0) "done ${consistency.done} of ${consistency.scheduled}" else null,
                 ).joinToString(" · "),
                 state = state,
                 repeating = true,
                 entryId = null,
                 seriesId = series.id,
                 date = date,
+                time = sortTime,
             )
         }
     }
 
-    private fun repositoryDescribe(o: DayItem.Occurrence): String =
-        repository.describe(o.series).replaceFirstChar { it.lowercase() }
+    private fun MoneyItem.toRow() = DayRow(
+        key = "m:$id",
+        kind = EntryKind.NOTE,
+        title = title,
+        description = "",
+        meta = listOf(time.label(), account).filter { it.isNotBlank() }.joinToString(" · "),
+        state = EntryState.OPEN,
+        repeating = false,
+        entryId = null,
+        seriesId = null,
+        date = date,
+        time = time,
+        money = this,
+    )
 
     override fun onEvent(event: DayEvent) {
         when (event) {
-            is DayEvent.SelectDate -> selected = event.date
+            is DayEvent.SelectDate -> {
+                selected = event.date
+                PlannerSelection.date = event.date
+            }
             is DayEvent.Toggle -> viewModelScope.launch {
                 val row = event.row
+                if (row.money != null) return@launch
                 val newState = if (row.state == EntryState.DONE) EntryState.OPEN else EntryState.DONE
                 if (row.entryId != null) {
                     repository.setState(row.entryId, newState)
@@ -172,14 +250,17 @@ class DayViewModel @Inject constructor(
                     repository.setOccurrenceState(row.seriesId, row.date, newState)
                 }
             }
-            is DayEvent.QuickAdd -> viewModelScope.launch {
-                repository.quickAdd(event.kind, event.title, selected)
-            }
+            is DayEvent.RapidLog -> viewModelScope.launch { repository.rapidLog(event.text, selected) }
             is DayEvent.OverdueDone -> viewModelScope.launch { repository.setState(event.id, EntryState.DONE) }
             is DayEvent.OverdueMove -> viewModelScope.launch {
                 repository.move(event.id, event.date, today = LocalDate.now())
             }
             is DayEvent.OverdueDrop -> viewModelScope.launch { repository.setState(event.id, EntryState.DROPPED) }
+            DayEvent.ToggleFilter -> {
+                todoOnly = !todoOnly
+                prefs.todoOnly = todoOnly
+            }
+            DayEvent.Refresh -> refresh++
         }
     }
 }

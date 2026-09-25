@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,9 +46,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.ivy.base.model.TransactionType
+import com.ivy.navigation.EditTransactionScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.PlannerReviewScreen
@@ -60,6 +67,7 @@ import com.ivy.planner.ui.CheckCircle
 import com.ivy.planner.ui.DayTitleFmt
 import com.ivy.planner.ui.EntryRow
 import com.ivy.planner.ui.MonthCalendar
+import com.ivy.planner.ui.NowMarker
 import com.ivy.planner.ui.Pill
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
@@ -93,7 +101,35 @@ fun PlannerDayTab() {
 private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) {
     val nav = navigation()
     var monthOpen by remember { mutableStateOf(false) }
-    val colors = state.rows.map { timelineColor(it.kind, it.state) }
+    val colors = state.rows.map { timelineColor(it.kind, it.state, isMoney = it.money != null) }
+    val listState = rememberLazyListState()
+
+    // reload expenses whenever the screen comes back (e.g. after adding one in the wallet)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) onEvent(DayEvent.Refresh) }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // items above the timeline, to translate a row index into a list position
+    val showBanner = state.date == state.today && state.today.dayOfWeek == java.time.DayOfWeek.MONDAY
+    val leadingItems = 2 + (if (showBanner) 1 else 0) + (if (state.overdue.isNotEmpty()) 1 else 0) +
+        (if (state.rows.isEmpty()) 1 else 0)
+    // today opens scrolled to one hour before now; other days open at the top
+    var scrolledFor by remember { mutableStateOf<LocalDate?>(null) }
+    LaunchedEffect(state.date, state.scrollIndex) {
+        if (scrolledFor == state.date) return@LaunchedEffect
+        val target = state.scrollIndex
+        if (state.rows.isEmpty()) return@LaunchedEffect
+        scrolledFor = state.date
+        if (target != null) {
+            // the "now" marker is drawn inside its row's item, so it adds no list positions
+            listState.scrollToItem(leadingItems + target)
+        } else {
+            listState.scrollToItem(0)
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -107,6 +143,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
         },
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = padding.calculateTopPadding(),
@@ -122,6 +159,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                     onToday = { onEvent(DayEvent.SelectDate(state.today)) },
                     onSearch = { nav.navigateTo(PlannerSearchScreen) },
                     onMonth = { monthOpen = true },
+                    onToggleFilter = { onEvent(DayEvent.ToggleFilter) },
                 )
                 WeekStrip(
                     selected = state.date,
@@ -132,7 +170,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                     onNextWeek = { onEvent(DayEvent.SelectDate(state.date.plusWeeks(1))) },
                 )
             }
-            if (state.date == state.today && state.today.dayOfWeek == java.time.DayOfWeek.MONDAY) {
+            if (showBanner) {
                 item { SlimBanner("New week: review last week", "Review") { nav.navigateTo(PlannerReviewScreen) } }
             }
             if (state.overdue.isNotEmpty()) {
@@ -140,19 +178,20 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
             }
             item {
                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)) {
-                    RapidLog(placeholder = "Add a task…", onSubmit = { k, t -> onEvent(DayEvent.QuickAdd(k, t)) })
+                    RapidLog(placeholder = "Rapid log…", today = state.today, onSubmit = { onEvent(DayEvent.RapidLog(it)) })
                 }
             }
             if (state.rows.isEmpty()) {
                 item {
                     Text(
-                        "Nothing logged for this day yet.",
+                        if (state.todoOnly) "Nothing left to do." else "Nothing logged for this day yet.",
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             itemsIndexed(state.rows, key = { _, row -> row.key }) { index, row ->
+                if (index == state.nowIndex) NowMarker(state.nowLabel)
                 Column(Modifier.padding(start = 10.dp, end = 12.dp)) {
                     EntryRow(
                         lineAbove = if (index > 0) colors[index - 1] else null,
@@ -164,17 +203,33 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                         state = row.state,
                         repeating = row.repeating,
                         onToggle = { onEvent(DayEvent.Toggle(row)) },
+                        moneyLabel = row.money?.label,
+                        moneyIsIncome = row.money?.isIncome ?: false,
+                        dimmed = row.dimmed,
                         onClick = {
-                            nav.navigateTo(
-                                PlannerEditScreen(
-                                    entryId = row.entryId,
-                                    seriesId = row.seriesId,
-                                    epochDay = row.date.toEpochDay(),
-                                ),
-                            )
+                            val m = row.money
+                            if (m != null) {
+                                nav.navigateTo(
+                                    EditTransactionScreen(
+                                        initialTransactionId = m.id,
+                                        type = if (m.isIncome) TransactionType.INCOME else TransactionType.EXPENSE,
+                                    ),
+                                )
+                            } else {
+                                nav.navigateTo(
+                                    PlannerEditScreen(
+                                        entryId = row.entryId,
+                                        seriesId = row.seriesId,
+                                        epochDay = row.date.toEpochDay(),
+                                    ),
+                                )
+                            }
                         },
                     )
                 }
+            }
+            if (state.nowIndex != null && state.nowIndex == state.rows.size && state.rows.isNotEmpty()) {
+                item { NowMarker(state.nowLabel) }
             }
         }
     }
@@ -208,6 +263,7 @@ private fun HeaderRow(
     onToday: () -> Unit,
     onSearch: () -> Unit,
     onMonth: () -> Unit,
+    onToggleFilter: () -> Unit,
 ) {
     Row(
         Modifier
@@ -232,6 +288,14 @@ private fun HeaderRow(
         }
         if (state.date != state.today) {
             TextButton(onClick = onToday) { Text("Today", color = PlannerColors.Accent, fontWeight = FontWeight.Bold) }
+        }
+        // Everything / To do
+        TextButton(onClick = onToggleFilter) {
+            Text(
+                if (state.todoOnly) "To do" else "All",
+                color = if (state.todoOnly) PlannerColors.Accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Bold,
+            )
         }
         IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Search") }
         IconButton(onClick = onMonth) { Icon(Icons.Outlined.DateRange, "Month calendar") }

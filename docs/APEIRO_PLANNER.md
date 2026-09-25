@@ -28,6 +28,18 @@ events, notes and (later) journal entries, routines and trackers, alongside expe
 - The weekly review steps through last week's open tasks: Done, Migrate (to this week),
   Schedule, Drop.
 
+## Timing and capture
+
+- Every task has a time. Without one, it gets the earliest free slot 08:00–24:00
+  (today: from now, rounded up to the quarter hour), using the durations of the day's
+  timed tasks, events and repeating tasks. Default duration: 15 min (`AutoTime`).
+- Rapid log understands day, time and duration ("call Sunil tomorrow at 7pm for 30 min")
+  and "- " / "o " prefixes for notes and events (`RapidLogParser`, fully offline).
+- Notes take the time they were written. Events without a time are all-day.
+- Expenses and income from the money database appear on the Day timeline (read-only),
+  and the Week tab shows each day's total spend.
+- Database v2 adds durations and a reminders table (several reminders per task or event).
+
 ## Already in the schema for later versions
 
 Routine steps with per-day progress and snapshots, checklists, collections (boards and

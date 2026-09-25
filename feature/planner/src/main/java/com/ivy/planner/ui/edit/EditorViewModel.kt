@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import com.ivy.planner.data.PlannerRepository
+import com.ivy.planner.domain.AutoTime
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
@@ -15,10 +16,10 @@ import com.ivy.planner.domain.RepeatSchedule
 import com.ivy.planner.domain.Series
 import com.ivy.ui.ComposeViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 /** How an edit to a repeating task applies. */
 enum class EditScope { ONLY_TODAY, TODAY_AND_FUTURE }
@@ -33,6 +34,7 @@ data class EditorState(
     val description: String,
     val date: LocalDate,
     val time: LocalTime?,
+    val durationMinutes: Int,
     val schedule: RepeatSchedule?,
     val repeatLabel: String,
     val askScope: Boolean,
@@ -46,6 +48,7 @@ sealed interface EditorEvent {
     data class SetDescription(val description: String) : EditorEvent
     data class SetDate(val date: LocalDate) : EditorEvent
     data class SetTime(val time: LocalTime?) : EditorEvent
+    data class SetDuration(val minutes: Int) : EditorEvent
     data class SetRepeat(val schedule: RepeatSchedule?) : EditorEvent
     data object Save : EditorEvent
     data class ConfirmScope(val scope: EditScope) : EditorEvent
@@ -69,6 +72,7 @@ class EditorViewModel @Inject constructor(
     private var description by mutableStateOf("")
     private var date by mutableStateOf(LocalDate.now())
     private var time by mutableStateOf<LocalTime?>(null)
+    private var duration by mutableStateOf(AutoTime.DEFAULT_DURATION)
     private var schedule by mutableStateOf<RepeatSchedule?>(null)
     private var askScope by mutableStateOf(false)
     private var closed by mutableStateOf(false)
@@ -83,6 +87,7 @@ class EditorViewModel @Inject constructor(
         description = description,
         date = date,
         time = time,
+        durationMinutes = duration,
         schedule = schedule,
         repeatLabel = schedule?.let { RepeatCodec.describe(it) } ?: "Never",
         askScope = askScope,
@@ -104,6 +109,7 @@ class EditorViewModel @Inject constructor(
                 if (series == null) schedule = schedule?.copy(start = event.date)
             }
             is EditorEvent.SetTime -> time = event.time
+            is EditorEvent.SetDuration -> duration = event.minutes
             is EditorEvent.SetRepeat -> schedule = event.schedule?.copy(start = if (series == null) date else event.schedule.start)
             EditorEvent.Save -> save()
             is EditorEvent.ConfirmScope -> {
@@ -144,6 +150,7 @@ class EditorViewModel @Inject constructor(
                     description = e.description
                     date = e.date ?: event.date
                     time = e.time
+                    duration = e.durationMinutes ?: AutoTime.DEFAULT_DURATION
                 }
             } else if (event.seriesId != null) {
                 repository.getSeries(event.seriesId)?.let { s ->
@@ -152,6 +159,7 @@ class EditorViewModel @Inject constructor(
                     title = s.title
                     description = s.description
                     time = s.time
+                    duration = s.durationMinutes ?: AutoTime.DEFAULT_DURATION
                     schedule = s.schedule
                 }
             }
@@ -163,7 +171,8 @@ class EditorViewModel @Inject constructor(
         if (title.isBlank()) return
         val s = series
         if (s != null) {
-            val changed = title != s.title || description != s.description || time != s.time || schedule != s.schedule
+            val changed = title != s.title || description != s.description || time != s.time ||
+                schedule != s.schedule || duration != (s.durationMinutes ?: AutoTime.DEFAULT_DURATION)
             if (!changed) {
                 closed = true
                 return
@@ -189,15 +198,23 @@ class EditorViewModel @Inject constructor(
                         description = description.trim(),
                         time = time,
                         schedule = sch.copy(start = date),
+                        durationMinutes = duration,
                     ),
                 )
             } else {
                 val base = entry ?: Entry(id = "", kind = kind, title = "")
                 if (entry == null) {
-                    repository.quickAdd(kind, title, date, time = time, description = description.trim())
+                    repository.quickAdd(kind, title, date, time = time, description = description.trim(), durationMinutes = duration)
                 } else {
                     repository.saveEntry(
-                        base.copy(kind = kind, title = title.trim(), description = description.trim(), date = date, time = time),
+                        base.copy(
+                            kind = kind,
+                            title = title.trim(),
+                            description = description.trim(),
+                            date = date,
+                            time = time,
+                            durationMinutes = duration,
+                        ),
                     )
                 }
             }
@@ -221,7 +238,7 @@ class EditorViewModel @Inject constructor(
                     if (sch == null) {
                         // repeat turned off: end the series and keep today as a one-off
                         repository.endSeries(s, date.minusDays(1))
-                        repository.quickAdd(kind, title, date, time = time, description = description.trim())
+                        repository.quickAdd(kind, title, date, time = time, description = description.trim(), durationMinutes = duration)
                     } else {
                         repository.updateSeriesFrom(
                             original = s,
@@ -231,6 +248,7 @@ class EditorViewModel @Inject constructor(
                                 description = description.trim(),
                                 time = time,
                                 schedule = sch,
+                                durationMinutes = duration,
                             ),
                             from = date,
                         )

@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,10 +41,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerReviewScreen
 import com.ivy.navigation.PlannerWeekScreen
@@ -87,6 +91,12 @@ private val RangeFmt = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 @Composable
 private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolean) {
     val nav = navigation()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) onEvent(WeekEvent.Refresh) }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     Scaffold { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -113,6 +123,13 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
                         }
                         IconButton(onClick = { onEvent(WeekEvent.SetWeek(state.week.next())) }) {
                             Icon(Icons.Filled.KeyboardArrowRight, "Next week")
+                        }
+                        TextButton(onClick = { onEvent(WeekEvent.ToggleFilter) }) {
+                            Text(
+                                if (state.todoOnly) "To do" else "All",
+                                color = if (state.todoOnly) PlannerColors.Accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                         TextButton(onClick = { nav.navigateTo(PlannerReviewScreen) }) {
                             Text("Review", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
@@ -141,8 +158,9 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
             item {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                     RapidLog(
-                        placeholder = "Add a task for this week…",
-                        onSubmit = { _, t -> onEvent(WeekEvent.AddWeekTask(t)) },
+                        placeholder = "Rapid log for this week…",
+                        today = state.today,
+                        onSubmit = { onEvent(WeekEvent.AddWeekTask(it)) },
                     )
                     Spacer(Modifier.height(20.dp))
                     SectionLabel("Days", MaterialTheme.colorScheme.onSurfaceVariant)
@@ -161,7 +179,11 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
                         color = if (day.date == state.today) PlannerColors.Accent else MaterialTheme.colorScheme.onSurface,
                     )
                     if (day.lines.isEmpty()) {
-                        Text("Nothing planned", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                        Text(
+                            if (state.todoOnly) "Nothing left to do" else "Nothing planned",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp,
+                        )
                     }
                     day.lines.forEach { line ->
                         Text(
@@ -171,6 +193,9 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             textDecoration = if (line.state == EntryState.DONE) TextDecoration.LineThrough else null,
                         )
+                    }
+                    day.spend?.let {
+                        Text(it, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PlannerColors.Accent)
                     }
                 }
                 HorizontalDivider(Modifier.padding(horizontal = 20.dp))

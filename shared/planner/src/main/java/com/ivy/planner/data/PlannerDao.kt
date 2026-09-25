@@ -38,6 +38,9 @@ interface EntryDao {
 
     @Query("DELETE FROM entries WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("SELECT * FROM entries WHERE date = :date")
+    suspend fun onDate(date: Long): List<EntryEntity>
 }
 
 @Dao
@@ -51,6 +54,9 @@ interface SeriesDao {
     @Query("SELECT * FROM series")
     fun observeAll(): Flow<List<SeriesEntity>>
 
+    @Query("SELECT * FROM series")
+    suspend fun all(): List<SeriesEntity>
+
     @Query("DELETE FROM series WHERE id = :id")
     suspend fun delete(id: String)
 }
@@ -62,6 +68,9 @@ interface OccurrenceDao {
 
     @Query("SELECT * FROM occurrences WHERE series_id = :seriesId AND date = :date")
     suspend fun find(seriesId: String, date: Long): OccurrenceEntity?
+
+    @Query("SELECT * FROM occurrences WHERE date >= :from")
+    suspend fun since(from: Long): List<OccurrenceEntity>
 
     /** Records from [from] onwards: enough for day views and 30-day consistency. */
     @Query("SELECT * FROM occurrences WHERE date >= :from")
@@ -139,4 +148,16 @@ interface TrackerDao {
 
     @Query("SELECT * FROM readings WHERE tracker_id = :trackerId ORDER BY measured_at")
     fun observeReadings(trackerId: String): Flow<List<ReadingEntity>>
+}
+
+@Dao
+interface ReminderDao {
+    @Upsert
+    suspend fun upsert(reminder: ReminderEntity)
+
+    @Query("SELECT * FROM reminders WHERE owner_id = :ownerId ORDER BY minutes_before DESC")
+    suspend fun forOwner(ownerId: String): List<ReminderEntity>
+
+    @Query("DELETE FROM reminders WHERE owner_id = :ownerId")
+    suspend fun deleteForOwner(ownerId: String)
 }

@@ -28,6 +28,7 @@ data class PlannerBackupData(
     @SerialName("attachments") val attachments: List<AttachmentEntity> = emptyList(),
     @SerialName("trackers") val trackers: List<TrackerEntity> = emptyList(),
     @SerialName("readings") val readings: List<ReadingEntity> = emptyList(),
+    @SerialName("reminders") val reminders: List<ReminderEntity> = emptyList(),
 )
 
 @Dao
@@ -44,6 +45,7 @@ interface PlannerBackupDao {
     @Query("SELECT * FROM attachments") suspend fun attachments(): List<AttachmentEntity>
     @Query("SELECT * FROM trackers") suspend fun trackers(): List<TrackerEntity>
     @Query("SELECT * FROM readings") suspend fun readings(): List<ReadingEntity>
+    @Query("SELECT * FROM reminders") suspend fun reminders(): List<ReminderEntity>
 
     @Upsert suspend fun upsertEntries(items: List<EntryEntity>)
     @Upsert suspend fun upsertSeries(items: List<SeriesEntity>)
@@ -57,6 +59,7 @@ interface PlannerBackupDao {
     @Upsert suspend fun upsertAttachments(items: List<AttachmentEntity>)
     @Upsert suspend fun upsertTrackers(items: List<TrackerEntity>)
     @Upsert suspend fun upsertReadings(items: List<ReadingEntity>)
+    @Upsert suspend fun upsertReminders(items: List<ReminderEntity>)
 }
 
 /**
@@ -86,6 +89,7 @@ class PlannerBackupSection @Inject constructor(
             attachments = dao.attachments(),
             trackers = dao.trackers(),
             readings = dao.readings(),
+            reminders = dao.reminders(),
         ),
     )
 
@@ -104,6 +108,7 @@ class PlannerBackupSection @Inject constructor(
             dao.upsertAttachments(backup.attachments)
             dao.upsertTrackers(backup.trackers)
             dao.upsertReadings(backup.readings)
+            dao.upsertReminders(backup.reminders)
         }
     }
 
