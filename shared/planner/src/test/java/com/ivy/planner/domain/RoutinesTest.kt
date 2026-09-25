@@ -52,4 +52,13 @@ class RoutinesTest {
         Routines.timerFacts(steps[2]) shouldBe emptyList()
         Routines.clock(65) shouldBe "1:05"
     }
+
+    @Test
+    fun `checklist from description lines`() {
+        var n = 0
+        val items = checklistFromLines("BEL Kotdwar PBG\n- Chiprime advance\n\n2. Centum quote\n• IDFC OD") { "i${n++}" }
+        items.map { it.text } shouldBe listOf("BEL Kotdwar PBG", "Chiprime advance", "Centum quote", "IDFC OD")
+        items.map { it.id } shouldBe listOf("i0", "i1", "i2", "i3")
+        listOf(ChecklistItem("a", "x", true), ChecklistItem("b", "y")).progressLabel() shouldBe "1 of 2"
+    }
 }

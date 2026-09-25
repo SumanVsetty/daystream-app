@@ -216,6 +216,28 @@ internal fun FocusDayUi(
                                 if (details.isNotEmpty()) {
                                     Text(details.joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
+                                // checklist items, tickable right here
+                                if (next.checklist.isNotEmpty()) {
+                                    Column {
+                                        next.checklist.take(6).forEach { item ->
+                                            Row(
+                                                Modifier.fillMaxWidth().clickable { onEvent(DayEvent.ToggleChecklistItem(item.id, !item.done)) },
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                CheckCircle(checked = item.done, onToggle = { onEvent(DayEvent.ToggleChecklistItem(item.id, !item.done)) }, size = 16.dp)
+                                                Text(
+                                                    item.text,
+                                                    fontSize = 14.sp,
+                                                    color = if (item.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                                    textDecoration = if (item.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                                )
+                                            }
+                                        }
+                                        if (next.checklist.size > 6) {
+                                            Text("+${next.checklist.size - 6} more", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 28.dp))
+                                        }
+                                    }
+                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     if (next.routine != null) {
                                         Pill("▶ Start", true, { openRow(nav, next) })

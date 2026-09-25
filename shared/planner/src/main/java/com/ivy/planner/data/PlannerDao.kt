@@ -119,6 +119,15 @@ interface StepDao {
 
     @Query("DELETE FROM steps WHERE series_id = :seriesId")
     suspend fun deleteForSeries(seriesId: String)
+
+    @Query("SELECT * FROM steps WHERE entry_id IS NOT NULL ORDER BY position")
+    fun observeChecklists(): Flow<List<StepEntity>>
+
+    @Query("DELETE FROM steps WHERE entry_id = :entryId")
+    suspend fun deleteForEntry(entryId: String)
+
+    @Query("UPDATE steps SET done = :done WHERE id = :id")
+    suspend fun setDone(id: String, done: Boolean)
 }
 
 @Dao
@@ -167,6 +176,9 @@ interface CollectionDao {
 
     @Query("SELECT collection_id FROM entry_collections WHERE owner_id = :ownerId")
     suspend fun collectionsOf(ownerId: String): List<String>
+
+    @Query("SELECT * FROM collections WHERE id = :id")
+    suspend fun findById(id: String): CollectionEntity?
 }
 
 @Dao
@@ -179,6 +191,9 @@ interface PeopleDao {
 
     @Query("SELECT * FROM people ORDER BY name")
     fun observeAll(): Flow<List<PersonEntity>>
+
+    @Query("SELECT * FROM people WHERE id = :id")
+    suspend fun findById(id: String): PersonEntity?
 
     @Query("SELECT * FROM entry_people")
     fun observeTags(): Flow<List<EntryPersonEntity>>

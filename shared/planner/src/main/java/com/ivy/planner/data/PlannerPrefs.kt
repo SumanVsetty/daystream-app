@@ -27,6 +27,14 @@ class PlannerPrefs @Inject constructor(
             prefs.edit().putBoolean(KEY_FOCUS_LAYOUT, value).apply()
         }
 
+    /** Your names for importance levels 1–4 (Lifely-style defaults until changed). */
+    var importanceLabels: List<String>
+        get() = prefs.getString(KEY_IMPORTANCE, null)?.split("\n")?.takeIf { it.size == 4 }
+            ?: com.ivy.planner.domain.ImportanceLabels.defaults
+        set(value) {
+            prefs.edit().putString(KEY_IMPORTANCE, value.take(4).joinToString("\n") { it.replace("\n", " ").trim() }).apply()
+        }
+
     /** Snoozed reminders: reminder key → when to remind again. Past snoozes are dropped. */
     var snoozes: Map<String, LocalDateTime>
         get() = prefs.getStringSet(KEY_SNOOZES, emptySet()).orEmpty().mapNotNull { s ->
@@ -63,6 +71,7 @@ class PlannerPrefs @Inject constructor(
     private companion object {
         const val KEY_TODO_ONLY = "day_filter_todo_only"
         const val KEY_FOCUS_LAYOUT = "day_layout_focus"
+        const val KEY_IMPORTANCE = "importance_labels"
         const val KEY_SNOOZES = "reminder_snoozes"
         const val KEY_CODES = "reminder_alarm_codes"
         const val KEY_DEFAULT_REMINDER = "default_reminder_minutes"

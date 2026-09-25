@@ -14,6 +14,7 @@ import com.ivy.planner.data.LibraryRepository
 import com.ivy.planner.data.PlannerPrefs
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.domain.AutoTime
+import com.ivy.planner.domain.ChecklistItem
 import com.ivy.planner.domain.CollectionType
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.EntryKind
@@ -21,6 +22,8 @@ import com.ivy.planner.domain.EntryState
 import com.ivy.planner.domain.RepeatCodec
 import com.ivy.planner.domain.RepeatSchedule
 import com.ivy.planner.domain.Series
+import com.ivy.planner.domain.checklistFromLines
+import com.ivy.planner.ui.ImportanceNames
 import com.ivy.ui.ComposeViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
@@ -57,6 +60,10 @@ data class EditorState(
     val library: Library?,
     /** Minutes before (0 = at the time). */
     val reminders: List<Int>,
+    val checklist: List<ChecklistItem>,
+    /** Existing files (attachment id → file, type) and files picked but not saved yet. */
+    val files: List<Triple<String, File, String>>,
+    val pendingFiles: List<Uri>,
 )
 
 sealed interface EditorEvent {
@@ -84,6 +91,14 @@ sealed interface EditorEvent {
     data class RemovePhoto(val attachmentId: String) : EditorEvent
     data class RemovePendingPhoto(val uri: Uri) : EditorEvent
     data class ToggleReminder(val minutesBefore: Int) : EditorEvent
+    data class AddChecklistItem(val text: String) : EditorEvent
+    data class ToggleChecklistItem(val id: String) : EditorEvent
+    data class RemoveChecklistItem(val id: String) : EditorEvent
+    data object ChecklistFromDescription : EditorEvent
+    data class AddFiles(val uris: List<Uri>) : EditorEvent
+    data class RemoveFile(val attachmentId: String) : EditorEvent
+    data class RemovePendingFile(val uri: Uri) : EditorEvent
+    data class RenameImportance(val labels: List<String>) : EditorEvent
 }
 
 @HiltViewModel
@@ -114,6 +129,14 @@ class EditorViewModel @Inject constructor(
     private var pendingPhotos by mutableStateOf(listOf<Uri>())
     private var removedPhotos = setOf<String>()
     private var reminders by mutableStateOf(listOf<Int>())
+    private var checklist by mutableStateOf(listOf<ChecklistItem>())
+    private var checklistTouched = false
+    private var files by mutableStateOf(listOf<Triple<String, File, String>>())
+    private var pendingFiles by mutableStateOf(listOf<Uri>())
+
+    init {
+        ImportanceNames.labels = prefs.importanceLabels
+    }
     private var remindersTouched = false
 
     @Composable
@@ -144,6 +167,9 @@ class EditorViewModel @Inject constructor(
         pendingPhotos = pendingPhotos,
         library = lib,
         reminders = reminders,
+        checklist = checklist,
+        files = files,
+        pendingFiles = pendingFiles,
     )
 
     override fun onEvent(event: EditorEvent) {
@@ -201,6 +227,33 @@ class EditorViewModel @Inject constructor(
                 photos = photos.filterNot { it.first == event.attachmentId }
             }
             is EditorEvent.RemovePendingPhoto -> pendingPhotos = pendingPhotos - event.uri
+            is EditorEvent.AddChecklistItem -> if (event.text.isNotBlank()) {
+                checklistTouched = true
+                checklist = checklist + ChecklistItem(library.newItemId(), event.text.trim())
+            }
+            is EditorEvent.ToggleChecklistItem -> {
+                checklistTouched = true
+                checklist = checklist.map { if (it.id == event.id) it.copy(done = !it.done) else it }
+            }
+            is EditorEvent.RemoveChecklistItem -> {
+                checklistTouched = true
+                checklist = checklist.filterNot { it.id == event.id }
+            }
+            EditorEvent.ChecklistFromDescription -> {
+                checklistTouched = true
+                checklist = checklist + checklistFromLines(description) { library.newItemId() }
+                description = ""
+            }
+            is EditorEvent.AddFiles -> pendingFiles = pendingFiles + event.uris
+            is EditorEvent.RemoveFile -> {
+                removedPhotos = removedPhotos + event.attachmentId
+                files = files.filterNot { it.first == event.attachmentId }
+            }
+            is EditorEvent.RemovePendingFile -> pendingFiles = pendingFiles - event.uri
+            is EditorEvent.RenameImportance -> {
+                prefs.importanceLabels = event.labels
+                ImportanceNames.labels = prefs.importanceLabels
+            }
             is EditorEvent.ToggleReminder -> {
                 remindersTouched = true
                 reminders = if (event.minutesBefore in reminders) reminders - event.minutesBefore
@@ -252,6 +305,9 @@ class EditorViewModel @Inject constructor(
                 importance = entry?.importance ?: 0
                 peopleIds = library.peopleOf(event.entryId).toSet()
                 photos = library.photosOf(event.entryId).map { it.id to library.photoFile(it.fileName) }
+                files = library.attachments(event.entryId).filterNot { it.mimeType.startsWith("image/") }
+                    .map { Triple(it.id, library.photoFile(it.fileName), it.mimeType) }
+                checklist = library.checklist(event.entryId)
             }
             loaded = true
         }
@@ -268,6 +324,8 @@ class EditorViewModel @Inject constructor(
         repository.setImportance(ownerId, importance)
         removedPhotos.forEach { library.removePhoto(it) }
         pendingPhotos.forEach { library.addPhoto(ownerId, it) }
+        pendingFiles.forEach { library.addFile(ownerId, it) }
+        if (checklistTouched) library.saveChecklist(ownerId, checklist)
     }
 
     private fun save() {

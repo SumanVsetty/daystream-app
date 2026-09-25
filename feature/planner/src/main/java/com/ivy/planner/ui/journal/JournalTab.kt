@@ -79,7 +79,12 @@ import kotlinx.coroutines.launch
 class JournalViewModel @Inject constructor(
     val library: LibraryRepository,
     val planner: PlannerRepository,
-) : ViewModel()
+    prefs: com.ivy.planner.data.PlannerPrefs,
+) : ViewModel() {
+    init {
+        com.ivy.planner.ui.ImportanceNames.labels = prefs.importanceLabels
+    }
+}
 
 /** Opens an entry in the editor. */
 internal fun openEntry(nav: com.ivy.navigation.Navigation, e: Entry) =
@@ -177,7 +182,7 @@ private fun JournalUi(vm: JournalViewModel) {
                             onClick = { nav.navigateTo(PlannerTimelineScreen(personId = p.id)) },
                             top = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    PersonAvatar(p.name, size = 38)
+                                    PersonAvatar(p.name, size = 38, photo = p.photoFile?.let(vm.library::photoFile))
                                     Spacer(Modifier.width(10.dp))
                                     Column {
                                         Text(p.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -205,6 +210,7 @@ private fun JournalUi(vm: JournalViewModel) {
                         InfoCard(
                             onClick = { nav.navigateTo(PlannerTimelineScreen(collectionId = c.id)) },
                             accent = Color(c.color),
+                            cover = c.coverFile?.let(vm.library::photoFile),
                             top = {
                                 Column {
                                     Text(c.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -280,6 +286,7 @@ private fun InfoCard(
     top: @Composable () -> Unit,
     bottom: String?,
     accent: Color? = null,
+    cover: java.io.File? = null,
 ) {
     Column(
         Modifier
@@ -288,7 +295,11 @@ private fun InfoCard(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
     ) {
-        if (accent != null) Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
+        if (cover != null) {
+            AsyncImage(model = cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(64.dp))
+        } else if (accent != null) {
+            Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
+        }
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             top()
             if (bottom != null) {

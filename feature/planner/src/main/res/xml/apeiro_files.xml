@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- entry photos and files, shared read-only with the viewer app when opened -->
+    <files-path name="attachments" path="apeiro_attachments/" />
+</paths>

@@ -73,6 +73,7 @@ data class DayRow(
     val tags: List<RowTag> = emptyList(),
     val photos: List<File> = emptyList(),
     val isRoutine: Boolean = false,
+    val checklist: List<com.ivy.planner.domain.ChecklistItem> = emptyList(),
     /** For routines: steps done and total today. */
     val routine: Pair<Int, Int>? = null,
 )
@@ -127,6 +128,7 @@ sealed interface DayEvent {
     data class OverdueDrop(val id: String) : DayEvent
     data object ToggleFilter : DayEvent
     data object ToggleLayout : DayEvent
+    data class ToggleChecklistItem(val itemId: String, val done: Boolean) : DayEvent
     /** Move to the next free slot today. */
     data class Later(val row: DayRow) : DayEvent
     /** Same time tomorrow (repeating tasks: skip today). */
@@ -397,9 +399,16 @@ class DayViewModel @Inject constructor(
         val owner = entryId ?: seriesId ?: return this
         val collections = lib.collectionsOf[owner].orEmpty().mapNotNull { lib.collection(it) }
         val people = entryId?.let { lib.peopleOf[it] }.orEmpty().mapNotNull { lib.person(it)?.name }
+        val items = entryId?.let { lib.checklistOf[it] }.orEmpty()
+        val files = entryId?.let { lib.filesOf[it] }.orEmpty()
+        val extras = listOfNotNull(
+            items.takeIf { it.isNotEmpty() }?.let { "☑ " + it.count { i -> i.done } + " of " + it.size },
+            files.takeIf { it.isNotEmpty() }?.let { if (it.size == 1) "1 PDF" else "${it.size} PDFs" },
+        )
         return copy(
+            checklist = items,
             tags = collections.map { RowTag(it.name, Color(it.color)) },
-            meta = (listOf(meta) + people).filter { it.isNotBlank() }.joinToString(" · "),
+            meta = (extras + listOf(meta) + people).filter { it.isNotBlank() }.joinToString(" · "),
             photos = entryId?.let { lib.photosOf[it] }.orEmpty().map { library.photoFile(it) },
         )
     }
@@ -431,6 +440,7 @@ class DayViewModel @Inject constructor(
                 prefs.todoOnly = todoOnly
             }
             DayEvent.Refresh -> refresh++
+            is DayEvent.ToggleChecklistItem -> viewModelScope.launch { library.setChecklistItem(event.itemId, event.done) }
             DayEvent.ToggleLayout -> {
                 focusLayout = !focusLayout
                 prefs.focusLayout = focusLayout

@@ -10,16 +10,17 @@ import com.ivy.planner.data.LibraryRepository
 import com.ivy.planner.data.PlannerPrefs
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.domain.AutoTime
+import com.ivy.planner.domain.ChecklistItem
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.RapidLogParser
 import com.ivy.planner.domain.RepeatSchedule
 import com.ivy.planner.domain.Series
 import com.ivy.planner.domain.isoWeek
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 /** What the add sheet opens with. */
 data class AddRequest(val kind: EntryKind, val date: LocalDate, val text: String = "")
@@ -67,6 +68,13 @@ class AddSheetViewModel @Inject constructor(
     var peopleIds by mutableStateOf(setOf<String>())
     var collectionIds by mutableStateOf(setOf<String>())
     var photos by mutableStateOf(listOf<Uri>())
+    var files by mutableStateOf(listOf<Uri>())
+    var checklist by mutableStateOf(listOf<String>())
+    var showChecklist by mutableStateOf(false)
+
+    init {
+        com.ivy.planner.ui.ImportanceNames.labels = prefs.importanceLabels
+    }
 
     fun reset(request: AddRequest) {
         kind = request.kind
@@ -84,6 +92,9 @@ class AddSheetViewModel @Inject constructor(
         peopleIds = emptySet()
         collectionIds = emptySet()
         photos = emptyList()
+        files = emptyList()
+        checklist = emptyList()
+        showChecklist = false
     }
 
     val parsed get() = RapidLogParser.parse(text, LocalDate.now())
@@ -135,6 +146,12 @@ class AddSheetViewModel @Inject constructor(
                     photos.forEach { library.addPhoto(owner, it) }
                 } else if (photos.isNotEmpty()) {
                     photos.forEach { library.addPhoto(owner, it) }
+                }
+            }
+            if (sch == null || !(k == EntryKind.TASK || k == EntryKind.EVENT)) {
+                files.forEach { library.addFile(owner, it) }
+                if (k == EntryKind.TASK && checklist.isNotEmpty()) {
+                    library.saveChecklist(owner, checklist.map { ChecklistItem(library.newItemId(), it) })
                 }
             }
             if (k == EntryKind.TASK || k == EntryKind.EVENT) planner.setReminders(owner, rem)

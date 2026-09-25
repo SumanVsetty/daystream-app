@@ -13,6 +13,18 @@ enum class CollectionType { BOARD, TOPIC }
 
 data class Person(val id: String, val name: String, val photoFile: String? = null)
 
+/** An item in a task's checklist. */
+data class ChecklistItem(val id: String, val text: String, val done: Boolean = false)
+
+/** "2 of 5" */
+fun List<ChecklistItem>.progressLabel(): String = "${count { it.done }} of $size"
+
+/** Turns description lines into checklist items (bullets and numbering removed). */
+fun checklistFromLines(text: String, newId: () -> String): List<ChecklistItem> = text.lines()
+    .map { it.trim().trimStart('-', '•', '*', '–').trim().replace(Regex("""^\d+[.)]\s*"""), "") }
+    .filter { it.isNotBlank() }
+    .map { ChecklistItem(newId(), it) }
+
 /** Pastel colours offered for boards and collections (ARGB). */
 object CollectionColors {
     val all: List<Long> = listOf(

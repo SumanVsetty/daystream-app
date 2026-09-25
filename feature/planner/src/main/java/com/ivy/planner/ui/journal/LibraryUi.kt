@@ -32,15 +32,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.ivy.planner.data.Library
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.ImportanceLabels
 import com.ivy.planner.ui.EntryRow
+import com.ivy.planner.ui.ImportanceNames
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.RowTag
 import com.ivy.planner.ui.SectionLabel
@@ -125,22 +128,23 @@ fun LazyListScope.libraryTimeline(
 /** Four importance chips; selecting any shows only those levels. */
 @Composable
 fun ImportanceFilter(selected: Set<Int>, onToggle: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf("Cool", "Unusual", "Important", "Life-changing").forEachIndexed { i, name ->
             val level = i + 1
             val on = level in selected
+            // selected chips are filled with their colour, so the choice is obvious
             Row(
                 Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (on) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                    .background(if (on) importanceColor(level) else Color.Transparent)
                     .border(1.5.dp, if (on) importanceColor(level) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
                     .clickable { onToggle(level) }
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(9.dp).clip(CircleShape).background(importanceColor(level)))
-                Spacer(Modifier.width(6.dp))
-                Text(name, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.size(9.dp).clip(CircleShape).background(if (on) Color(0xFF1B1D1B) else importanceColor(level)))
+                Spacer(Modifier.width(5.dp))
+                Text(name, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = if (on) Color(0xFF1B1D1B) else MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -148,7 +152,7 @@ fun ImportanceFilter(selected: Set<Int>, onToggle: (Int) -> Unit, modifier: Modi
 
 /** Importance picker for the editor: four coloured circles with the selected label below. */
 @Composable
-fun ImportancePicker(level: Int, onPick: (Int) -> Unit) {
+fun ImportancePicker(level: Int, onPick: (Int) -> Unit, onEditNames: (() -> Unit)? = null) {
     Column {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             (1..4).forEach { l ->
@@ -165,24 +169,33 @@ fun ImportancePicker(level: Int, onPick: (Int) -> Unit) {
                 }
             }
         }
-        Text(
-            ImportanceLabels.label(level) ?: "No importance set",
-            modifier = Modifier.padding(top = 6.dp),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (level > 0) importanceColor(level) else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                ImportanceNames.label(level) ?: "No importance set",
+                modifier = Modifier.padding(top = 6.dp).weight(1f, fill = false),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (level > 0) importanceColor(level) else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (onEditNames != null) {
+                TextButton(onClick = onEditNames) { Text("Edit names", fontSize = 12.sp) }
+            }
+        }
     }
 }
 
 /** A round initial avatar for a person. */
 @Composable
-fun PersonAvatar(name: String, size: Int = 44, color: Color = PlannerColors.Event) {
+fun PersonAvatar(name: String, size: Int = 44, color: Color = PlannerColors.Event, photo: File? = null) {
     Box(
         Modifier.size(size.dp).clip(CircleShape).background(color),
         contentAlignment = Alignment.Center,
     ) {
-        Text(name.take(1).uppercase(), color = Color(0xFF132238), fontWeight = FontWeight.ExtraBold, fontSize = (size * 0.42).sp)
+        if (photo != null) {
+            AsyncImage(model = photo, contentDescription = name, contentScale = ContentScale.Crop, modifier = Modifier.size(size.dp))
+        } else {
+            Text(name.take(1).uppercase(), color = Color(0xFF132238), fontWeight = FontWeight.ExtraBold, fontSize = (size * 0.42).sp)
+        }
     }
 }
 
@@ -205,6 +218,39 @@ fun NameDialog(title: String, initial: String = "", confirm: String = "Add", onD
         confirmButton = {
             TextButton(onClick = { onDone(name.trim()) }, enabled = name.isNotBlank()) {
                 Text(confirm, color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Rename the four importance levels. */
+@Composable
+fun ImportanceNamesDialog(onSave: (List<String>) -> Unit, onDismiss: () -> Unit) {
+    var names by remember { mutableStateOf(ImportanceNames.labels) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Importance names") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                names.forEachIndexed { i, name ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(14.dp).clip(CircleShape).background(importanceColor(i + 1)))
+                        Spacer(Modifier.width(10.dp))
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { v -> names = names.toMutableList().also { it[i] = v } },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(names.mapIndexed { i, n -> n.ifBlank { ImportanceLabels.defaults[i] } }) }) {
+                Text("Save", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

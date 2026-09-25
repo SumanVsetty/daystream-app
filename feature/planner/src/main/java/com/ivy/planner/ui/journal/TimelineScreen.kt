@@ -1,5 +1,9 @@
 package com.ivy.planner.ui.journal
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,13 +13,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -39,9 +43,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.ivy.navigation.PlannerTimelineScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
@@ -77,6 +83,14 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                personId?.let { vm.library.setPersonPhoto(it, uri) }
+                collectionId?.let { vm.library.setCollectionCover(it, uri) }
+            }
+        }
+    }
 
     val l = lib
     val person = personId?.let { l?.person(it) }
@@ -91,11 +105,14 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
         }
     }
     val years = all.mapNotNull { it.date?.year }.distinct().sortedDescending()
-    val shown = all
+    // counts on the type chips follow the other filters (year and importance)
+    val otherFilters = all
         .filter { year == null || it.date?.year == year }
-        .filter { type.kinds == null || it.kind in type.kinds!! }
         .filter { importance.isEmpty() || it.importance in importance }
+    val shown = otherFilters
+        .filter { type.kinds == null || it.kind in type.kinds!! }
         .newestFirst()
+    val filtering = year != null || importance.isNotEmpty() || type != TypeFilter.ALL
     val since = all.mapNotNull { it.date }.minOrNull()
 
     Scaffold { padding ->
@@ -103,16 +120,26 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 48.dp),
         ) {
+            collection?.coverFile?.let { cover ->
+                item {
+                    AsyncImage(
+                        model = vm.library.photoFile(cover),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                    )
+                }
+            }
             item {
                 Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { nav.back() }) { Icon(Icons.Filled.ArrowBack, "Back") }
-                    if (person != null) PersonAvatar(person.name, size = 40)
+                    if (person != null) PersonAvatar(person.name, size = 40, photo = person.photoFile?.let(vm.library::photoFile))
                     if (collection != null) Box(Modifier.size(14.dp).clip(CircleShape).background(Color(collection.color)))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(name, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            "${all.size} entries" + (since?.let { " · since ${it.month.name.lowercase().replaceFirstChar { c -> c.uppercase() }.take(3)} ${it.year}" } ?: ""),
+                            (if (filtering) "${shown.size} of ${all.size} entries" else "${all.size} entries") + (since?.let { " · since ${it.month.name.lowercase().replaceFirstChar { c -> c.uppercase() }.take(3)} ${it.year}" } ?: ""),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -121,6 +148,13 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
+                            DropdownMenuItem(
+                                text = { Text(if (person != null) "Change photo" else "Change cover photo") },
+                                onClick = {
+                                    menu = false
+                                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                            )
                             DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; deleting = true })
                         }
                     }
@@ -132,7 +166,7 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     TypeFilter.values().forEach { t ->
-                        val count = if (t.kinds == null) all.size else all.count { it.kind in t.kinds }
+                        val count = if (t.kinds == null) otherFilters.size else otherFilters.count { it.kind in t.kinds }
                         if (t == TypeFilter.ALL || count > 0) {
                             Pill(if (t == TypeFilter.ALL) "All" else "${t.label} $count", type == t, { type = t })
                         }

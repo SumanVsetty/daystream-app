@@ -1,19 +1,20 @@
 package com.ivy.planner.data
 
 import android.net.Uri
+import com.ivy.planner.domain.ChecklistItem
 import com.ivy.planner.domain.Collection
 import com.ivy.planner.domain.CollectionColors
 import com.ivy.planner.domain.CollectionType
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.Person
 import com.ivy.planner.domain.TagMatch
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
-import java.util.UUID
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /** Everything needed by the Journal tab, timelines, boards and search. */
 data class Library(
@@ -26,6 +27,10 @@ data class Library(
     val peopleOf: Map<String, List<String>>,
     /** entry id → photo file names */
     val photosOf: Map<String, List<String>>,
+    /** entry id → other files (e.g. PDFs): stored name to display name */
+    val filesOf: Map<String, List<Pair<String, String>>> = emptyMap(),
+    /** entry id → checklist */
+    val checklistOf: Map<String, List<ChecklistItem>> = emptyMap(),
 ) {
     fun collection(id: String) = collections.firstOrNull { it.id == id }
     fun person(id: String) = people.firstOrNull { it.id == id }
@@ -44,23 +49,56 @@ class LibraryRepository @Inject constructor(
             db.entryDao().observeAll(),
             db.collectionDao().observeAll(),
             db.collectionDao().observeLinks(),
-        ) { e, c, l -> Triple(e, c, l) }
+            db.stepDao().observeChecklists(),
+        ) { e, c, l, s -> Base(e, c, l, s) }
         return combine(
             base,
             db.peopleDao().observeAll(),
             db.peopleDao().observeTags(),
             db.attachmentDao().observeAll(),
-        ) { (entries, collections, links), people, tags, attachments ->
+        ) { b, people, tags, attachments ->
+            val (images, files) = attachments.partition { it.mimeType.startsWith("image/") }
             Library(
-                entries = entries.map { it.toDomain() },
-                collections = collections.map { it.toDomain() },
-                collectionsOf = links.groupBy({ it.ownerId }, { it.collectionId }),
+                entries = b.entries.map { it.toDomain() },
+                collections = b.collections.map { it.toDomain() },
+                collectionsOf = b.links.groupBy({ it.ownerId }, { it.collectionId }),
                 people = people.map { Person(it.id, it.name, it.photoUri) },
                 peopleOf = tags.groupBy({ it.entryId }, { it.personId }),
-                photosOf = attachments.groupBy({ it.entryId }, { it.fileName }),
+                photosOf = images.groupBy({ it.entryId }, { it.fileName }),
+                filesOf = files.groupBy({ it.entryId }, { it.fileName to displayNameOf(it) }),
+                checklistOf = b.steps.groupBy({ it.entryId!! }, { ChecklistItem(it.id, it.heading, it.done) }),
             )
         }
     }
+
+    private data class Base(
+        val entries: List<EntryEntity>,
+        val collections: List<CollectionEntity>,
+        val links: List<EntryCollectionEntity>,
+        val steps: List<StepEntity>,
+    )
+
+    /** A file's display name is kept after its type: "application/pdf;Lab report.pdf". */
+    private fun displayNameOf(a: AttachmentEntity): String = a.mimeType.substringAfter(';', "").ifBlank {
+        if (a.mimeType == "application/pdf") "PDF" else "File"
+    }
+
+    // ---------------------------------------------------------------- checklists
+
+    /** Replaces an entry's checklist. */
+    suspend fun saveChecklist(entryId: String, items: List<ChecklistItem>) {
+        db.stepDao().deleteForEntry(entryId)
+        items.forEachIndexed { i, item ->
+            db.stepDao().upsert(StepEntity(id = item.id, entryId = entryId, position = i, heading = item.text.trim(), done = item.done))
+        }
+    }
+
+    suspend fun checklist(entryId: String): List<ChecklistItem> =
+        db.stepDao().forEntry(entryId).map { ChecklistItem(it.id, it.heading, it.done) }
+
+    suspend fun setChecklistItem(itemId: String, done: Boolean) = db.stepDao().setDone(itemId, done)
+
+    fun newItemId(): String = newId()
 
     // ---------------------------------------------------------------- collections
 
@@ -129,7 +167,8 @@ class LibraryRepository @Inject constructor(
 
     // ---------------------------------------------------------------- photos
 
-    suspend fun photosOf(entryId: String): List<AttachmentEntity> = db.attachmentDao().forEntry(entryId)
+    suspend fun photosOf(entryId: String): List<AttachmentEntity> =
+        db.attachmentDao().forEntry(entryId).filter { it.mimeType.startsWith("image/") }
 
     suspend fun addPhoto(entryId: String, uri: Uri): Boolean = withContext(Dispatchers.IO) {
         val id = newId()
@@ -137,6 +176,32 @@ class LibraryRepository @Inject constructor(
         db.attachmentDao().upsert(AttachmentEntity(id, entryId, name, "image/jpeg", System.currentTimeMillis()))
         true
     }
+
+    /** Adds any file (e.g. a PDF). Its display name is kept with the type, as "application/pdf;Lab report.pdf". */
+    suspend fun addFile(entryId: String, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val id = newId()
+        val (name, mime) = store.importFile(uri, id) ?: return@withContext false
+        val display = store.displayName(uri)?.replace(";", " ")
+        db.attachmentDao().upsert(AttachmentEntity(id, entryId, name, mime + (display?.let { ";$it" } ?: ""), System.currentTimeMillis()))
+        true
+    }
+
+    /** A person's photo or a collection's cover, stored like entry photos. */
+    suspend fun setPersonPhoto(personId: String, uri: Uri) = withContext(Dispatchers.IO) {
+        val p = db.peopleDao().findById(personId) ?: return@withContext
+        val name = store.importPhoto(uri, "person-" + newId()) ?: return@withContext
+        p.photoUri?.let { store.delete(it) }
+        db.peopleDao().upsert(p.copy(photoUri = name))
+    }
+
+    suspend fun setCollectionCover(collectionId: String, uri: Uri) = withContext(Dispatchers.IO) {
+        val c = db.collectionDao().findById(collectionId) ?: return@withContext
+        val name = store.importPhoto(uri, "cover-" + newId()) ?: return@withContext
+        c.coverUri?.let { store.delete(it) }
+        db.collectionDao().upsert(c.copy(coverUri = name))
+    }
+
+    suspend fun attachments(entryId: String): List<AttachmentEntity> = db.attachmentDao().forEntry(entryId)
 
     suspend fun removePhoto(attachmentId: String) = withContext(Dispatchers.IO) {
         db.attachmentDao().findById(attachmentId)?.let { store.delete(it.fileName) }

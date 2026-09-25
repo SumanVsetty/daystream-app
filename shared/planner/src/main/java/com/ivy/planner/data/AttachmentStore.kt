@@ -43,6 +43,26 @@ class AttachmentStore @Inject constructor(
         name
     }.getOrNull()
 
+    /** Copies a picked file (e.g. a PDF) in as "<id>.<ext>"; returns the stored name and its type. */
+    fun importFile(uri: Uri, id: String): Pair<String, String>? = runCatching {
+        val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+        val ext = when {
+            mime == "application/pdf" -> "pdf"
+            mime.startsWith("image/") -> mime.substringAfter('/')
+            else -> "bin"
+        }
+        val name = "$id.$ext"
+        context.contentResolver.openInputStream(uri)?.use { input -> file(name).outputStream().use { input.copyTo(it) } } ?: return null
+        name to mime
+    }.getOrNull()
+
+    /** The display name of a picked file, e.g. "Lab report Sep.pdf". */
+    fun displayName(uri: Uri): String? = runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull()
+
     fun read(name: String): ByteArray? = file(name).takeIf { it.exists() }?.readBytes()
 
     fun write(name: String, bytes: ByteArray) {

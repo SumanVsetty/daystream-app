@@ -128,6 +128,9 @@ private fun AddSheet(vm: AddSheetViewModel, onClose: () -> Unit) {
         if (uris.isNotEmpty()) vm.photos = vm.photos + uris
     }
     val send = { vm.save(onClose) }
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) vm.files = vm.files + uris
+    }
     val scope = rememberCoroutineScope()
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = sheet) {
@@ -214,6 +217,41 @@ private fun AddSheet(vm: AddSheetViewModel, onClose: () -> Unit) {
                 Text("+ Details", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { vm.showDetails = true })
             }
 
+            // checklist, for tasks: type an item and press enter to add the next
+            if (kind == EntryKind.TASK && vm.showChecklist) {
+                var item by remember { mutableStateOf("") }
+                val addItem = {
+                    if (item.isNotBlank()) vm.checklist = vm.checklist + item.trim()
+                    item = ""
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    vm.checklist.forEachIndexed { i, text ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(16.dp).clip(CircleShape).border(1.5.dp, PlannerColors.Done, CircleShape))
+                            Text(text, Modifier.weight(1f).padding(start = 10.dp), fontSize = 15.sp)
+                            Text(
+                                "✕",
+                                modifier = Modifier.clickable { vm.checklist = vm.checklist.filterIndexed { j, _ -> j != i } }.padding(8.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = item,
+                        onValueChange = { item = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Add an item") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { addItem() }),
+                        trailingIcon = {
+                            if (item.isNotBlank()) Text("Add", color = PlannerColors.Accent, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { addItem() }.padding(8.dp))
+                        },
+                    )
+                }
+            }
+
             // journal: photos, importance, people, collections
             if (kind == EntryKind.JOURNAL) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -246,7 +284,7 @@ private fun AddSheet(vm: AddSheetViewModel, onClose: () -> Unit) {
                         )
                     }
                     Text(
-                        ImportanceLabels.label(vm.importance) ?: "Importance",
+                        com.ivy.planner.ui.ImportanceNames.label(vm.importance) ?: "Importance",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (vm.importance > 0) importanceColor(vm.importance) else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -300,10 +338,19 @@ private fun AddSheet(vm: AddSheetViewModel, onClose: () -> Unit) {
                         }
                     }
                 }
+                if (kind == EntryKind.TASK) {
+                    Chip(
+                        if (vm.checklist.isEmpty()) "Checklist" else "Checklist · ${vm.checklist.size}",
+                        set = vm.checklist.isNotEmpty(),
+                    ) { vm.showChecklist = !vm.showChecklist }
+                }
                 if (kind != EntryKind.JOURNAL) {
                     Chip(if (vm.photos.isEmpty()) "Photo" else "${vm.photos.size} photo", set = vm.photos.isNotEmpty()) {
                         picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
+                }
+                Chip(if (vm.files.isEmpty()) "PDF" else "${vm.files.size} PDF", set = vm.files.isNotEmpty()) {
+                    pdfPicker.launch(arrayOf("application/pdf"))
                 }
             }
             if (kind == EntryKind.JOURNAL) {

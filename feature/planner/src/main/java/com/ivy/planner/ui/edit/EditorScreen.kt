@@ -77,6 +77,7 @@ import com.ivy.planner.ui.PlannerDatePicker
 import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.PlannerTimePicker
 import com.ivy.planner.ui.SectionLabel
+import com.ivy.planner.ui.journal.ImportanceNamesDialog
 import com.ivy.planner.ui.journal.ImportancePicker
 import com.ivy.planner.ui.journal.NameDialog
 import com.ivy.planner.ui.label
@@ -114,6 +115,7 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
     var durationMenu by remember { mutableStateOf(false) }
     var addPerson by remember { mutableStateOf(false) }
     var addCollection by remember { mutableStateOf(false) }
+    var editNames by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -224,10 +226,13 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
             if (state.kind == EntryKind.TASK) {
                 BoardField(state, onEvent)
             }
+            if (state.kind == EntryKind.TASK && !state.isOccurrence) {
+                ChecklistField(state, onEvent)
+            }
             if (state.kind == EntryKind.JOURNAL) {
                 HorizontalDivider()
                 SectionLabel("Importance", MaterialTheme.colorScheme.onSurfaceVariant)
-                ImportancePicker(state.importance) { onEvent(EditorEvent.SetImportance(it)) }
+                ImportancePicker(state.importance, { onEvent(EditorEvent.SetImportance(it)) }, onEditNames = { editNames = true })
                 SectionLabel("People", MaterialTheme.colorScheme.onSurfaceVariant)
                 ChipPicker(
                     items = state.library?.people.orEmpty().map { it.id to it.name },
@@ -246,8 +251,9 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 )
             }
             if (!state.isOccurrence) {
-                SectionLabel("Photos", MaterialTheme.colorScheme.onSurfaceVariant)
+                SectionLabel("Photos and files", MaterialTheme.colorScheme.onSurfaceVariant)
                 PhotosField(state, onEvent)
+                FilesField(state, onEvent)
             }
             if (state.isOccurrence) {
                 HorizontalDivider()
@@ -324,6 +330,12 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
             confirmButton = {},
             dismissButton = { TextButton(onClick = { onEvent(EditorEvent.DismissScope) }) { Text("Cancel") } },
         )
+    }
+    if (editNames) {
+        ImportanceNamesDialog(onSave = {
+            onEvent(EditorEvent.RenameImportance(it))
+            editNames = false
+        }, onDismiss = { editNames = false })
     }
     if (addPerson) {
         NameDialog("New person", onDone = {
@@ -518,5 +530,98 @@ private fun RemindersField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 )
             }
         }
+    }
+}
+
+/** A task's checklist: tick items, add, remove, or turn the description's lines into items. */
+@Composable
+private fun ChecklistField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
+    var newItem by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(
+                if (state.checklist.isEmpty()) "Checklist" else "Checklist · ${state.checklist.count { it.done }} of ${state.checklist.size}",
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            if (state.checklist.isEmpty() && state.description.lines().count { it.isNotBlank() } >= 2) {
+                TextButton(onClick = { onEvent(EditorEvent.ChecklistFromDescription) }) {
+                    Text("Make description a checklist", fontSize = 12.sp, color = PlannerColors.Accent)
+                }
+            }
+        }
+        state.checklist.forEach { item ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = item.done, onCheckedChange = { onEvent(EditorEvent.ToggleChecklistItem(item.id)) })
+                Text(
+                    item.text,
+                    Modifier.weight(1f),
+                    textDecoration = if (item.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                    color = if (item.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                )
+                IconButton(onClick = { onEvent(EditorEvent.RemoveChecklistItem(item.id)) }) {
+                    Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newItem,
+                onValueChange = { newItem = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Add an item") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+                    onEvent(EditorEvent.AddChecklistItem(newItem))
+                    newItem = ""
+                }),
+            )
+            TextButton(onClick = {
+                onEvent(EditorEvent.AddChecklistItem(newItem))
+                newItem = ""
+            }) { Text("Add", color = PlannerColors.Accent, fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+/** PDFs and other files: open, remove, or add with the system file picker. */
+@Composable
+private fun FilesField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) onEvent(EditorEvent.AddFiles(uris))
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        state.files.forEach { (id, file, mime) ->
+            FileChip(mime.substringAfter(';', "").ifBlank { "PDF" }, onOpen = { com.ivy.planner.ui.openAttachment(context, file, mime) }) {
+                onEvent(EditorEvent.RemoveFile(id))
+            }
+        }
+        state.pendingFiles.forEach { uri ->
+            FileChip("New file", onOpen = {}) { onEvent(EditorEvent.RemovePendingFile(uri)) }
+        }
+        TextButton(onClick = { picker.launch(arrayOf("application/pdf")) }) {
+            Text("+ PDF", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun FileChip(name: String, onOpen: () -> Unit, onRemove: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onOpen)
+            .padding(start = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("PDF", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = PlannerColors.Accent)
+        Spacer(Modifier.width(10.dp))
+        Text(name, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1)
+        IconButton(onClick = onRemove) { Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }

@@ -94,9 +94,10 @@ class PlannerBackupSection @Inject constructor(
             trackers = dao.trackers(),
             readings = dao.readings(),
             reminders = dao.reminders(),
-            files = dao.attachments().mapNotNull { a ->
-                store.read(a.fileName)?.let { a.fileName to Base64.getEncoder().encodeToString(it) }
-            }.toMap(),
+            files = (dao.attachments().map { it.fileName } + dao.people().mapNotNull { it.photoUri } + dao.collections().mapNotNull { it.coverUri })
+                .distinct()
+                .mapNotNull { name -> store.read(name)?.let { name to Base64.getEncoder().encodeToString(it) } }
+                .toMap(),
         ),
     )
 
