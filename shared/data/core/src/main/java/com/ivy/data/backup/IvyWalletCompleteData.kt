@@ -13,6 +13,7 @@ import com.ivy.data.db.entity.TagEntity
 import com.ivy.data.db.entity.TransactionEntity
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Keep
 @Serializable
@@ -39,5 +40,8 @@ data class IvyWalletCompleteData(
     @SerialName("tags")
     val tags: List<TagEntity> = emptyList(),
     @SerialName("tagAssociations")
-    val tagAssociations: List<TagAssociationEntity> = emptyList()
+    val tagAssociations: List<TagAssociationEntity> = emptyList(),
+    /** Plug-in sections (see BackupSection), e.g. "apeiroPlanner". */
+    @SerialName("sections")
+    val sections: Map<String, JsonElement> = emptyMap(),
 )

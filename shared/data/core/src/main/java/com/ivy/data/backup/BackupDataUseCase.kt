@@ -3,6 +3,7 @@ package com.ivy.data.backup
 import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
+import com.ivy.base.backup.BackupSection
 import com.ivy.base.legacy.SharedPrefs
 import com.ivy.base.legacy.unzip
 import com.ivy.base.legacy.zip
@@ -32,16 +33,16 @@ import com.ivy.data.file.FileSystem
 import com.ivy.data.repository.AccountRepository
 import com.ivy.data.repository.mapper.AccountMapper
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
+import javax.inject.Inject
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
-import javax.inject.Inject
 
 // TODO: Legacy code, needs improvements
 class BackupDataUseCase @Inject constructor(
@@ -72,7 +73,8 @@ class BackupDataUseCase @Inject constructor(
     private val tagsReader: TagDao,
     private val tagAssociationReader: TagAssociationDao,
     private val tagsWriter: WriteTagDao,
-    private val tagAssociationWriter: WriteTagAssociationDao
+    private val tagAssociationWriter: WriteTagAssociationDao,
+    private val backupSections: Set<@JvmSuppressWildcards BackupSection>,
 ) {
     suspend fun exportToFile(
         zipFileUri: Uri
@@ -120,7 +122,8 @@ class BackupDataUseCase @Inject constructor(
                 transactions = transactions.await(),
                 sharedPrefs = sharedPrefs.await(),
                 tags = tags.await(),
-                tagAssociations = tagAssociations.await()
+                tagAssociations = tagAssociations.await(),
+                sections = backupSections.associate { it.key to it.export() },
             )
 
             json.encodeToString(completeData)
@@ -212,6 +215,9 @@ class BackupDataUseCase @Inject constructor(
 
         onProgress(0.4)
         insertDataToDb(completeData = ivyWalletCompleteData, onProgress = onProgress)
+        backupSections.forEach { section ->
+            ivyWalletCompleteData.sections[section.key]?.let { section.import(it) }
+        }
         onProgress(1.0)
 
         if (clearCacheDir) {

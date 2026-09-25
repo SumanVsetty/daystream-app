@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.Fts4
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /*
  * Apeiro planner database tables.
@@ -13,6 +14,7 @@ import androidx.room.PrimaryKey
  */
 
 /** A one-off task, event, note or journal entry. */
+@Serializable
 @Entity(
     tableName = "entries",
     indices = [Index("date"), Index("week_year", "week_num"), Index("state")],
@@ -44,6 +46,7 @@ data class EntryFts(
 )
 
 /** The master of a repeating task or routine. */
+@Serializable
 @Entity(tableName = "series")
 data class SeriesEntity(
     @PrimaryKey val id: String,
@@ -63,6 +66,7 @@ data class SeriesEntity(
 )
 
 /** One day of a series, stored only when something happened or it was edited "only today". */
+@Serializable
 @Entity(
     tableName = "occurrences",
     primaryKeys = ["series_id", "date"],
@@ -81,6 +85,7 @@ data class OccurrenceEntity(
 )
 
 /** A step of a routine (or a checklist item). Generic: heading + description + optional extras. */
+@Serializable
 @Entity(tableName = "steps", indices = [Index("series_id"), Index("entry_id")])
 data class StepEntity(
     @PrimaryKey val id: String,
@@ -105,6 +110,7 @@ data class StepEntity(
 )
 
 /** Progress of a routine step on a given day. */
+@Serializable
 @Entity(tableName = "occurrence_steps", primaryKeys = ["series_id", "date", "step_id"])
 data class OccurrenceStepEntity(
     @ColumnInfo(name = "series_id") val seriesId: String,
@@ -115,6 +121,7 @@ data class OccurrenceStepEntity(
 )
 
 /** A collection: a task board (Taskito-style) or a life topic (Car, House, Suchet · School). */
+@Serializable
 @Entity(tableName = "collections")
 data class CollectionEntity(
     @PrimaryKey val id: String,
@@ -127,6 +134,7 @@ data class CollectionEntity(
     val archived: Boolean = false,
 )
 
+@Serializable
 @Entity(
     tableName = "entry_collections",
     primaryKeys = ["owner_id", "collection_id"],
@@ -138,6 +146,7 @@ data class EntryCollectionEntity(
     @ColumnInfo(name = "collection_id") val collectionId: String,
 )
 
+@Serializable
 @Entity(tableName = "people")
 data class PersonEntity(
     @PrimaryKey val id: String,
@@ -145,6 +154,7 @@ data class PersonEntity(
     @ColumnInfo(name = "photo_uri") val photoUri: String? = null,
 )
 
+@Serializable
 @Entity(
     tableName = "entry_people",
     primaryKeys = ["entry_id", "person_id"],
@@ -156,6 +166,7 @@ data class EntryPersonEntity(
 )
 
 /** A photo or file attached to an entry, stored in the app's private files. */
+@Serializable
 @Entity(tableName = "attachments", indices = [Index("entry_id")])
 data class AttachmentEntity(
     @PrimaryKey val id: String,
@@ -166,6 +177,7 @@ data class AttachmentEntity(
 )
 
 /** Something measured over time: weight, fasting blood sugar, ALT... */
+@Serializable
 @Entity(tableName = "trackers")
 data class TrackerEntity(
     @PrimaryKey val id: String,
@@ -176,6 +188,7 @@ data class TrackerEntity(
     val decimals: Int = 1,
 )
 
+@Serializable
 @Entity(tableName = "readings", indices = [Index("tracker_id"), Index("entry_id")])
 data class ReadingEntity(
     @PrimaryKey val id: String,
