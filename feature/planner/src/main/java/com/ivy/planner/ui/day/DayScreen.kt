@@ -1,7 +1,9 @@
 package com.ivy.planner.ui.day
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,12 +12,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +66,7 @@ import com.ivy.planner.ui.PlannerDatePicker
 import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.RapidLog
 import com.ivy.planner.ui.SectionLabel
+import com.ivy.planner.ui.ShortDayFmt
 import com.ivy.planner.ui.WeekStrip
 import com.ivy.planner.ui.timelineColor
 import com.ivy.planner.ui.withWeek
@@ -70,50 +78,51 @@ fun PlannerDayScreenImpl(screen: PlannerDayScreen) {
     LaunchedEffect(screen) {
         screen.epochDay?.let { viewModel.onEvent(DayEvent.SelectDate(LocalDate.ofEpochDay(it))) }
     }
-    PlannerTheme { DayUi(state = viewModel.uiState(), onEvent = viewModel::onEvent) }
+    PlannerTheme { DayUi(state = viewModel.uiState(), onEvent = viewModel::onEvent, asTab = false) }
+}
+
+/** The Day log as the app's main "Day" tab (no back button; the bottom bar's logo button adds entries). */
+@Composable
+fun PlannerDayTab() {
+    val viewModel: DayViewModel = screenScopedViewModel()
+    PlannerTheme { DayUi(state = viewModel.uiState(), onEvent = viewModel::onEvent, asTab = true) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit) {
+private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) {
     val nav = navigation()
     var monthOpen by remember { mutableStateOf(false) }
+    val colors = state.rows.map { timelineColor(it.kind, it.state) }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Day log", fontWeight = FontWeight.ExtraBold) },
-                navigationIcon = {
-                    IconButton(onClick = { nav.back() }) { Icon(Icons.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    IconButton(onClick = { nav.navigateTo(PlannerSearchScreen) }) {
-                        Icon(Icons.Outlined.Search, "Search")
-                    }
-                    IconButton(onClick = {
-                        val w = state.date.isoWeek()
-                        nav.navigateTo(PlannerWeekScreen(w.year, w.week))
-                    }) { Icon(Icons.Outlined.DateRange, "Week log") }
-                },
-            )
-        },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { nav.navigateTo(PlannerEditScreen(epochDay = state.date.toEpochDay())) },
-                containerColor = PlannerColors.Accent,
-                contentColor = PlannerColors.OnAccent,
-            ) { Icon(Icons.Filled.Add, "New entry") }
+            if (!asTab) {
+                FloatingActionButton(
+                    onClick = { nav.navigateTo(PlannerEditScreen(epochDay = state.date.toEpochDay())) },
+                    containerColor = PlannerColors.Accent,
+                    contentColor = PlannerColors.OnAccent,
+                ) { Icon(Icons.Filled.Add, "New entry") }
+            }
         },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = padding.calculateTopPadding(),
-                bottom = padding.calculateBottomPadding() + 96.dp,
+                // leave room for the app's bottom bar in tab mode, or the FAB otherwise
+                bottom = padding.calculateBottomPadding() + if (asTab) 110.dp else 88.dp,
             ),
         ) {
             item {
-                Header(state)
+                HeaderRow(
+                    state = state,
+                    showBack = !asTab,
+                    onBack = { nav.back() },
+                    onToday = { onEvent(DayEvent.SelectDate(state.today)) },
+                    onSearch = { nav.navigateTo(PlannerSearchScreen) },
+                    onMonth = { monthOpen = true },
+                )
                 WeekStrip(
                     selected = state.date,
                     today = state.today,
@@ -121,20 +130,17 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit) {
                     onSelect = { onEvent(DayEvent.SelectDate(it)) },
                     onPrevWeek = { onEvent(DayEvent.SelectDate(state.date.minusWeeks(1))) },
                     onNextWeek = { onEvent(DayEvent.SelectDate(state.date.plusWeeks(1))) },
-                    onOpenMonth = { monthOpen = true },
                 )
             }
             if (state.date == state.today && state.today.dayOfWeek == java.time.DayOfWeek.MONDAY) {
-                item {
-                    ReviewNudge { nav.navigateTo(PlannerReviewScreen) }
-                }
+                item { SlimBanner("New week: review last week", "Review") { nav.navigateTo(PlannerReviewScreen) } }
             }
             if (state.overdue.isNotEmpty()) {
-                item { OverdueCard(state.overdue, state.today, onEvent) }
+                item { OverdueSection(state.overdue, state.today, onEvent) }
             }
             item {
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                    RapidLog(placeholder = "Log a task, event or note…", onSubmit = { k, t -> onEvent(DayEvent.QuickAdd(k, t)) })
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)) {
+                    RapidLog(placeholder = "Add a task…", onSubmit = { k, t -> onEvent(DayEvent.QuickAdd(k, t)) })
                 }
             }
             if (state.rows.isEmpty()) {
@@ -147,8 +153,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit) {
                 }
             }
             itemsIndexed(state.rows, key = { _, row -> row.key }) { index, row ->
-                val colors = state.rows.map { timelineColor(it.kind, it.state) }
-                Column(Modifier.padding(horizontal = 12.dp)) {
+                Column(Modifier.padding(start = 10.dp, end = 12.dp)) {
                     EntryRow(
                         lineAbove = if (index > 0) colors[index - 1] else null,
                         lineBelow = if (index < state.rows.lastIndex) colors[index] else null,
@@ -189,90 +194,119 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit) {
                     nav.navigateTo(PlannerWeekScreen(w.year, w.week))
                 },
             )
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Pill("Today", false, {
-                    onEvent(DayEvent.SelectDate(state.today))
-                    monthOpen = false
-                })
-            }
             Spacer(Modifier.height(24.dp))
         }
     }
 }
 
+/** One compact row: date and week on the left, Today / search / month on the right. */
 @Composable
-private fun Header(state: DayState) {
-    Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
-        SectionLabel("Week ${state.date.isoWeek().week}")
-        Text(
-            text = if (state.date == state.today) "Today · ${state.date.format(DayTitleFmt)}" else state.date.format(DayTitleFmt),
-            fontSize = 26.sp,
-            fontWeight = FontWeight.ExtraBold,
-        )
-        if (state.summary.isNotBlank()) {
-            Text(state.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+private fun HeaderRow(
+    state: DayState,
+    showBack: Boolean,
+    onBack: () -> Unit,
+    onToday: () -> Unit,
+    onSearch: () -> Unit,
+    onMonth: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = if (showBack) 4.dp else 20.dp, end = 4.dp, top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (showBack) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
         }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = if (state.date == state.today) "Today, ${state.date.format(ShortDayFmt)}" else state.date.format(DayTitleFmt),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                listOf("Week ${state.date.isoWeek().week}", state.summary).filter { it.isNotBlank() }.joinToString(" · "),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (state.date != state.today) {
+            TextButton(onClick = onToday) { Text("Today", color = PlannerColors.Accent, fontWeight = FontWeight.Bold) }
+        }
+        IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Search") }
+        IconButton(onClick = onMonth) { Icon(Icons.Outlined.DateRange, "Month calendar") }
     }
 }
 
 @Composable
-private fun ReviewNudge(onOpen: () -> Unit) {
+private fun SlimBanner(text: String, action: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("New week: review last week's open tasks", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-        TextButton(onClick = onOpen) { Text("Review", color = PlannerColors.Accent, fontWeight = FontWeight.ExtraBold) }
+        Text(text, Modifier.weight(1f), fontSize = 14.sp)
+        Text(action, color = PlannerColors.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
     }
 }
 
+/** "Needs a decision": one slim line until tapped, then the tasks with their actions. */
 @Composable
-private fun OverdueCard(overdue: List<Entry>, today: LocalDate, onEvent: (DayEvent) -> Unit) {
+private fun OverdueSection(overdue: List<Entry>, today: LocalDate, onEvent: (DayEvent) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     var scheduling by remember { mutableStateOf<Entry?>(null) }
-    val shown = if (expanded) overdue else overdue.take(1)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
-        SectionLabel("Needs a decision · ${overdue.size}")
-        shown.forEach { entry ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CheckCircle(checked = false, onToggle = { onEvent(DayEvent.OverdueDone(entry.id)) })
-                Column(Modifier.weight(1f)) {
-                    Text(entry.title, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                    entry.date?.let {
-                        Text(
-                            "from ${it.withWeek()}",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(PlannerColors.Accent))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Needs a decision · ${overdue.size}",
+                Modifier.weight(1f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (expanded) {
+            overdue.forEach { entry ->
+                Column(Modifier.padding(start = 4.dp, end = 12.dp, bottom = 10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CheckCircle(checked = false, onToggle = { onEvent(DayEvent.OverdueDone(entry.id)) })
+                        Column(Modifier.weight(1f)) {
+                            Text(entry.title, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                            entry.date?.let {
+                                Text("from ${it.withWeek()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    Row(Modifier.padding(start = 40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Pill("> Today", false, { onEvent(DayEvent.OverdueMove(entry.id, today)) })
+                        Pill("< Schedule", false, { scheduling = entry })
+                        Pill("Drop", false, { onEvent(DayEvent.OverdueDrop(entry.id)) })
                     }
                 }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Pill("> Today", false, { onEvent(DayEvent.OverdueMove(entry.id, today)) })
-                Pill("< Schedule", false, { scheduling = entry })
-                Pill("Drop", false, { onEvent(DayEvent.OverdueDrop(entry.id)) })
-            }
-        }
-        if (overdue.size > 1) {
-            TextButton(onClick = { expanded = !expanded }) {
-                Text(if (expanded) "Show less" else "+${overdue.size - 1} more", color = PlannerColors.Accent)
             }
         }
     }

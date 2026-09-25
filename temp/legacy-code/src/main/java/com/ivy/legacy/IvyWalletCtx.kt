@@ -87,7 +87,7 @@ class IvyWalletCtx @Inject constructor() : IvyContext() {
     var loanListState: LazyListState? = null
 
     @Deprecated("Legacy code. Don't use it, please.")
-    var mainTab by mutableStateOf(com.ivy.legacy.data.model.MainTab.HOME)
+    var mainTab by mutableStateOf(com.ivy.legacy.data.model.MainTab.DAY)
         private set
 
     @Deprecated("Legacy code. Don't use it, please.")

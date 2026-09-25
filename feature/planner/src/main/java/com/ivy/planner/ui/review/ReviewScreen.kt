@@ -115,7 +115,7 @@ private fun ReviewUi(state: ReviewState, onEvent: (ReviewEvent) -> Unit) {
                         }
                         Text("Is this still worth doing?", fontWeight = FontWeight.SemiBold)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Choice("× Done", "It's finished", PlannerColors.Done, Color.White, Modifier.weight(1f)) {
+                            Choice("× Done", "It's finished", PlannerColors.Done, PlannerColors.OnDone, Modifier.weight(1f)) {
                                 onEvent(ReviewEvent.Done(current.id))
                             }
                             Choice("> Migrate", "Into week ${state.thisWeek.week}", PlannerColors.Accent, PlannerColors.OnAccent, Modifier.weight(1f)) {

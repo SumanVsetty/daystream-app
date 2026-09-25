@@ -4,5 +4,6 @@ import androidx.compose.runtime.Immutable
 
 @Immutable
 enum class MainTab {
-    HOME, ACCOUNTS
+    /** Apeiro planner tabs come first; HOME is the money overview. */
+    DAY, WEEK, HOME, ACCOUNTS
 }

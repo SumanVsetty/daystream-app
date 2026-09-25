@@ -7,13 +7,21 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Apeiro accent (the logo's orange dot) and status colours. */
+/**
+ * Soft pastel palette. Accents stay readable on the soft-black background
+ * and on light backgrounds; text placed on an accent uses the matching "On" colour.
+ */
 object PlannerColors {
-    val Accent = Color(0xFFE8674A)
-    val OnAccent = Color(0xFF1A0E0A)
-    val Done = Color(0xFF3FA66B)
-    val Event = Color(0xFF5B8FD6)
-    val Missed = Color(0xFFB0ADB8)
+    /** Pastel version of the logo's orange dot. */
+    val Accent = Color(0xFFF2A48C)
+    val OnAccent = Color(0xFF3A1D14)
+    /** Pastel mint, for tasks and done. */
+    val Done = Color(0xFF8FD4A3)
+    val OnDone = Color(0xFF0F2A18)
+    /** Pastel blue, for events. */
+    val Event = Color(0xFF9DBBEF)
+    /** Soft grey, for missed and skipped. */
+    val Missed = Color(0xFF8C918B)
 }
 
 internal val TimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")

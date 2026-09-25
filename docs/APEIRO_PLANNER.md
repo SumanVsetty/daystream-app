@@ -43,4 +43,4 @@ and a full-text search index.
 5. Routine player.
 6. Journal: importance, people, collections, photos; person and collection timelines.
 7. Trackers with charts; search filters.
-8. Make the Day log the home screen, with Money as a tab.
+8. Done: Day and Week are the main tabs (Day is the default); Money and Accounts follow.

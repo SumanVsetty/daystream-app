@@ -71,37 +71,38 @@ fun PlannerWeekScreenImpl(screen: PlannerWeekScreen) {
             viewModel.onEvent(WeekEvent.SetWeek(IsoWeek(year, week)))
         }
     }
-    PlannerTheme { WeekUi(viewModel.uiState(), viewModel::onEvent) }
+    PlannerTheme { WeekUi(viewModel.uiState(), viewModel::onEvent, asTab = false) }
+}
+
+/** The Week log as the app's main "Week" tab. */
+@Composable
+fun PlannerWeekTab() {
+    val viewModel: WeekViewModel = screenScopedViewModel()
+    PlannerTheme { WeekUi(viewModel.uiState(), viewModel::onEvent, asTab = true) }
 }
 
 private val RangeFmt = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit) {
+private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolean) {
     val nav = navigation()
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Week log", fontWeight = FontWeight.ExtraBold) },
-                navigationIcon = { IconButton(onClick = { nav.back() }) { Icon(Icons.Filled.ArrowBack, "Back") } },
-                actions = {
-                    TextButton(onClick = { nav.navigateTo(PlannerReviewScreen) }) {
-                        Text("Review", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    Scaffold { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = 48.dp),
+            contentPadding = PaddingValues(
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + if (asTab) 110.dp else 48.dp,
+            ),
         ) {
             item {
-                Column(Modifier.padding(horizontal = 20.dp)) {
+                Column(Modifier.padding(start = if (asTab) 20.dp else 4.dp, end = 4.dp, top = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!asTab) {
+                            IconButton(onClick = { nav.back() }) { Icon(Icons.Filled.ArrowBack, "Back") }
+                        }
                         Column(Modifier.weight(1f)) {
-                            Text("Week ${state.week.week}", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("Week ${state.week.week}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                             Text(
                                 "${state.week.monday.format(RangeFmt)} – ${state.week.sunday.format(RangeFmt)} ${state.week.sunday.year}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -113,7 +114,12 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit) {
                         IconButton(onClick = { onEvent(WeekEvent.SetWeek(state.week.next())) }) {
                             Icon(Icons.Filled.KeyboardArrowRight, "Next week")
                         }
+                        TextButton(onClick = { nav.navigateTo(PlannerReviewScreen) }) {
+                            Text("Review", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
+                        }
                     }
+                }
+                Column(Modifier.padding(horizontal = 20.dp)) {
                     if (state.total > 0) {
                         Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             LinearProgressIndicator(
@@ -137,7 +143,6 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit) {
                     RapidLog(
                         placeholder = "Add a task for this week…",
                         onSubmit = { _, t -> onEvent(WeekEvent.AddWeekTask(t)) },
-                        kinds = listOf(com.ivy.planner.domain.EntryKind.TASK),
                     )
                     Spacer(Modifier.height(20.dp))
                     SectionLabel("Days", MaterialTheme.colorScheme.onSurfaceVariant)

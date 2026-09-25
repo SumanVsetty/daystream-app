@@ -3,6 +3,7 @@ package com.ivy.planner.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
@@ -83,7 +85,7 @@ fun CheckCircle(
                 modifier = Modifier.size(24.dp).clip(CircleShape).background(PlannerColors.Done),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Check, contentDescription = "Mark not done", tint = Color.White, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Check, contentDescription = "Mark not done", tint = PlannerColors.OnDone, modifier = Modifier.size(16.dp))
             }
         } else {
             Box(
@@ -196,7 +198,10 @@ fun EntryRow(
     }
 }
 
-/** Mon–Sun strip for the week containing [selected], with dots for days that have items. */
+/**
+ * Compact Mon–Sun strip for the week containing [selected]: one row, no header.
+ * Swipe left or right to change week. Dots mark days that have items.
+ */
 @Composable
 fun WeekStrip(
     selected: LocalDate,
@@ -205,25 +210,27 @@ fun WeekStrip(
     onSelect: (LocalDate) -> Unit,
     onPrevWeek: () -> Unit,
     onNextWeek: () -> Unit,
-    onOpenMonth: () -> Unit,
 ) {
     val week = selected.isoWeek()
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onPrevWeek) { Icon(Icons.Filled.KeyboardArrowLeft, "Previous week") }
-            Text(
-                text = "${selected.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${selected.year} · W${week.week}",
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 15.sp,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onOpenMonth) { Text("Month", color = PlannerColors.Accent, fontWeight = FontWeight.Bold) }
-            IconButton(onClick = onNextWeek) { Icon(Icons.Filled.KeyboardArrowRight, "Next week") }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            week.days.forEach { day ->
-                DayCell(day, selected = day == selected, isToday = day == today, dot = dotFor(day)) { onSelect(day) }
-            }
+    var drag by remember { mutableStateOf(0f) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .pointerInput(week) {
+                detectHorizontalDragGestures(
+                    onDragStart = { drag = 0f },
+                    onDragEnd = {
+                        if (drag > 80f) onPrevWeek() else if (drag < -80f) onNextWeek()
+                        drag = 0f
+                    },
+                    onHorizontalDrag = { _, amount -> drag += amount },
+                )
+            },
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        week.days.forEach { day ->
+            DayCell(day, selected = day == selected, isToday = day == today, dot = dotFor(day)) { onSelect(day) }
         }
     }
 }
@@ -236,20 +243,20 @@ private fun DayCell(day: LocalDate, selected: Boolean, isToday: Boolean, dot: Co
             .clip(RoundedCornerShape(14.dp))
             .background(if (selected) PlannerColors.Accent else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val fg = if (selected) PlannerColors.OnAccent else MaterialTheme.colorScheme.onSurface
         Text(
             day.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.ENGLISH),
             fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             color = if (selected) fg else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             "${day.dayOfMonth}",
-            fontSize = 17.sp,
-            fontWeight = if (isToday || selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+            fontSize = 16.sp,
+            fontWeight = if (isToday || selected) FontWeight.Bold else FontWeight.Medium,
             color = if (isToday && !selected) PlannerColors.Accent else fg,
         )
         Box(
@@ -342,45 +349,50 @@ fun MonthCalendar(
     }
 }
 
-/** Rapid log: type a line, pick task / event / note, press enter. */
+/**
+ * Rapid log: type a line and press enter. It's always a task, unless the line starts
+ * with a bullet-journal symbol: "- " for a note, "o " for an event.
+ * The kind can be changed later in the editor.
+ */
+fun parseRapidLog(text: String): Pair<EntryKind, String> {
+    val t = text.trim()
+    return when {
+        t.startsWith("- ") || t.startsWith("– ") -> EntryKind.NOTE to t.drop(2).trim()
+        t.startsWith("o ") || t.startsWith("○ ") -> EntryKind.EVENT to t.drop(2).trim()
+        else -> EntryKind.TASK to t
+    }
+}
+
 @Composable
 fun RapidLog(
     placeholder: String,
     onSubmit: (EntryKind, String) -> Unit,
-    kinds: List<EntryKind> = listOf(EntryKind.TASK, EntryKind.EVENT, EntryKind.NOTE),
 ) {
     var text by remember { mutableStateOf("") }
-    var kind by remember { mutableStateOf(EntryKind.TASK) }
     val submit = {
-        if (text.isNotBlank()) {
-            onSubmit(kind, text)
+        val (kind, title) = parseRapidLog(text)
+        if (title.isNotBlank()) {
+            onSubmit(kind, title)
             text = ""
         }
     }
-    Column(Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(placeholder) },
-            singleLine = true,
-            shape = RoundedCornerShape(14.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { submit() }),
-            trailingIcon = {
-                IconButton(onClick = submit, enabled = text.isNotBlank()) {
-                    Icon(androidx.compose.material.icons.Icons.Filled.Check, contentDescription = "Add")
-                }
-            },
-        )
-        if (kinds.size > 1) {
-            Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                kinds.forEach { k ->
-                    KindChip(k, selected = k == kind) { kind = k }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { submit() }),
+        trailingIcon = {
+            if (text.isNotBlank()) {
+                IconButton(onClick = submit) {
+                    Icon(Icons.Filled.Check, contentDescription = "Add", tint = PlannerColors.Done)
                 }
             }
-        }
-    }
+        },
+    )
 }
 
 @Composable

@@ -34,8 +34,8 @@ class MainViewModel @Inject constructor(
 
     fun start(screen: MainScreen) {
         nav.onBackPressed[screen] = {
-            if (ivyContext.mainTab == MainTab.ACCOUNTS) {
-                ivyContext.selectMainTab(MainTab.HOME)
+            if (ivyContext.mainTab != MainTab.DAY) {
+                ivyContext.selectMainTab(MainTab.DAY)
                 true
             } else {
                 // Exiting (the backstack will close the app)

@@ -4,6 +4,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -46,8 +48,38 @@ fun PlannerTheme(content: @Composable () -> Unit) {
             labelSmall = base.labelSmall.figtree(),
         )
     }
+    val base0 = MaterialTheme.colorScheme
+    val dark = base0.background.luminance() < 0.5f
+    val colors = remember(base0, dark) {
+        if (dark) {
+            // Taskito-like soft black with gentle, low-contrast surfaces
+            base0.copy(
+                background = Color(0xFF1B1D1B),
+                surface = Color(0xFF1B1D1B),
+                surfaceVariant = Color(0xFF252925),
+                surfaceContainer = Color(0xFF252925),
+                surfaceContainerHigh = Color(0xFF2B302B),
+                surfaceContainerLow = Color(0xFF202320),
+                onBackground = Color(0xFFE4E6E1),
+                onSurface = Color(0xFFE4E6E1),
+                onSurfaceVariant = Color(0xFFA3A9A1),
+                outline = Color(0xFF5A605A),
+                outlineVariant = Color(0xFF3A403A),
+                primary = PlannerColors.Done,
+                onPrimary = PlannerColors.OnDone,
+            )
+        } else {
+            base0.copy(
+                background = Color(0xFFF7F6F2),
+                surface = Color(0xFFF7F6F2),
+                surfaceVariant = Color(0xFFECEBE5),
+                primary = Color(0xFF3E8E5B),
+                onPrimary = Color.White,
+            )
+        }
+    }
     MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme,
+        colorScheme = colors,
         shapes = MaterialTheme.shapes,
         typography = typography,
         content = content,

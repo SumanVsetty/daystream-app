@@ -9,6 +9,7 @@ android {
 dependencies {
     implementation(projects.feature.accounts)
     implementation(projects.feature.home)
+    implementation(projects.feature.planner)
     implementation(projects.shared.base)
     implementation(projects.shared.data.core)
     implementation(projects.shared.domain)

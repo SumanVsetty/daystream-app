@@ -21,7 +21,10 @@ import com.ivy.legacy.utils.onScreenStart
 import com.ivy.navigation.EditPlannedScreen
 import com.ivy.navigation.EditTransactionScreen
 import com.ivy.navigation.MainScreen
+import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.navigation
+import com.ivy.planner.ui.day.PlannerDayTab
+import com.ivy.planner.ui.week.PlannerWeekTab
 import com.ivy.wallet.domain.deprecated.logic.model.CreateAccountData
 import com.ivy.wallet.ui.theme.modal.edit.AccountModal
 import com.ivy.wallet.ui.theme.modal.edit.AccountModalData
@@ -61,6 +64,8 @@ private fun BoxWithConstraintsScope.UI(
     onCreateAccount: (CreateAccountData) -> Unit,
 ) {
     when (tab) {
+        MainTab.DAY -> PlannerDayTab()
+        MainTab.WEEK -> PlannerWeekTab()
         MainTab.HOME -> HomeTab()
         MainTab.ACCOUNTS -> AccountsTab()
     }
@@ -105,6 +110,9 @@ private fun BoxWithConstraintsScope.UI(
             )
         },
 
+        onAddPlannerEntry = {
+            nav.navigateTo(PlannerEditScreen(epochDay = java.time.LocalDate.now().toEpochDay()))
+        },
         showAddAccountModal = {
             accountModalData = AccountModalData(
                 account = null,

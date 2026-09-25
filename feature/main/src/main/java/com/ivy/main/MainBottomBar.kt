@@ -74,6 +74,9 @@ import kotlin.math.roundToInt
 val TRN_BUTTON_CLICK_AREA_HEIGHT = 150.dp
 val FAB_BUTTON_SIZE = 56.dp
 
+/** Apeiro planner accent (pastel orange). */
+private val PlannerAccent = Color(0xFFF2A48C)
+
 @Deprecated("Old design system. Use `:ivy-design` and Material3")
 @Composable
 fun BoxWithConstraintsScope.BottomBar(
@@ -84,6 +87,7 @@ fun BoxWithConstraintsScope.BottomBar(
     onAddExpense: () -> Unit,
     onAddTransfer: () -> Unit,
     onAddPlannedPayment: () -> Unit,
+    onAddPlannerEntry: () -> Unit,
 
     showAddAccountModal: () -> Unit,
 ) {
@@ -116,11 +120,17 @@ fun BoxWithConstraintsScope.BottomBar(
         animationSpec = springBounceFast()
     )
 
+    val plannerTab = tab == MainTab.DAY || tab == MainTab.WEEK
+    val barBackground = when {
+        !plannerTab -> pureBlur()
+        UI.colors.isLight -> Color(0xF2F7F6F2)
+        else -> Color(0xF21B1D1B) // matches the planner's soft-black background
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .align(Alignment.BottomCenter)
-            .background(pureBlur())
+            .background(barBackground)
             .alpha(1f - buttonsShownPercent)
             .navigationBarsPadding()
             .clickableNoIndication(rememberInteractionSource()) {
@@ -129,15 +139,33 @@ fun BoxWithConstraintsScope.BottomBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Tab(
+            icon = R.drawable.ic_vue_main_calendar,
+            name = "Day",
+            selected = tab == MainTab.DAY,
+            selectedColor = PlannerAccent
+        ) {
+            selectTab(MainTab.DAY)
+        }
+
+        Tab(
+            icon = R.drawable.ic_calendar,
+            name = "Week",
+            selected = tab == MainTab.WEEK,
+            selectedColor = PlannerAccent
+        ) {
+            selectTab(MainTab.WEEK)
+        }
+
+        Spacer(Modifier.width(FAB_BUTTON_SIZE))
+
+        Tab(
             icon = R.drawable.ic_home,
-            name = stringResource(R.string.home),
+            name = "Money",
             selected = tab == MainTab.HOME,
             selectedColor = Ivy
         ) {
             selectTab(MainTab.HOME)
         }
-
-        Spacer(Modifier.width(FAB_BUTTON_SIZE))
 
         Tab(
             icon = R.drawable.ic_accounts,
@@ -183,7 +211,8 @@ fun BoxWithConstraintsScope.BottomBar(
         mutableStateOf(Offset.Zero)
     }
     // Apeiro logo (home, collapsed) / + / x button
-    val showLogo = tab == MainTab.HOME && !expanded
+    val isPlannerTab = tab == MainTab.DAY || tab == MainTab.WEEK
+    val showLogo = (tab == MainTab.HOME || isPlannerTab) && !expanded
     val logoBorderColor = UI.colors.medium
     IvyCircleButton(
         modifier = Modifier
@@ -247,6 +276,7 @@ fun BoxWithConstraintsScope.BottomBar(
         backgroundPadding = 8.dp,
         icon = if (showLogo) R.drawable.ic_apeiro_logo else R.drawable.ic_add,
         backgroundGradient = when (tab) {
+            MainTab.DAY, MainTab.WEEK -> Gradient.solid(White)
             MainTab.HOME -> {
                 if (!expanded) Gradient.solid(White) else Gradient.solid(UI.colors.gray)
             }
@@ -259,6 +289,7 @@ fun BoxWithConstraintsScope.BottomBar(
         tint = if (showLogo) Color.Unspecified else White
     ) {
         when (tab) {
+            MainTab.DAY, MainTab.WEEK -> onAddPlannerEntry()
             MainTab.HOME -> {
                 expanded = !expanded
             }
