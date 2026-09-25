@@ -32,6 +32,8 @@ data class PlannerBackupData(
     @SerialName("reminders") val reminders: List<ReminderEntity> = emptyList(),
     /** Photo files (file name → base64), so a restore brings the pictures back too. */
     @SerialName("files") val files: Map<String, String> = emptyMap(),
+    /** Wallet tags linked to people and collections. */
+    @SerialName("tagLinks") val tagLinks: Map<String, List<String>> = emptyMap(),
 )
 
 @Dao
@@ -73,6 +75,7 @@ class PlannerBackupSection @Inject constructor(
     private val db: PlannerDatabase,
     private val json: Json,
     private val store: AttachmentStore,
+    private val prefs: PlannerPrefs,
 ) : BackupSection {
     override val key: String = KEY
 
@@ -98,11 +101,13 @@ class PlannerBackupSection @Inject constructor(
                 .distinct()
                 .mapNotNull { name -> store.read(name)?.let { name to Base64.getEncoder().encodeToString(it) } }
                 .toMap(),
+            tagLinks = prefs.tagLinks.mapValues { it.value.toList() },
         ),
     )
 
     override suspend fun import(data: JsonElement) {
         val backup = json.decodeFromJsonElement(PlannerBackupData.serializer(), data)
+        if (backup.tagLinks.isNotEmpty()) prefs.tagLinks = prefs.tagLinks + backup.tagLinks.mapValues { it.value.toSet() }
         backup.files.forEach { (name, b64) ->
             runCatching { store.write(name, Base64.getDecoder().decode(b64)) }
         }

@@ -79,7 +79,8 @@ import kotlinx.coroutines.launch
 class JournalViewModel @Inject constructor(
     val library: LibraryRepository,
     val planner: PlannerRepository,
-    prefs: com.ivy.planner.data.PlannerPrefs,
+    val prefs: com.ivy.planner.data.PlannerPrefs,
+    val money: com.ivy.planner.ui.MoneySource,
 ) : ViewModel() {
     init {
         com.ivy.planner.ui.ImportanceNames.labels = prefs.importanceLabels

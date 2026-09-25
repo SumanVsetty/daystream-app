@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,12 +19,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -35,7 +40,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -48,12 +55,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.ivy.base.model.TransactionType
+import com.ivy.navigation.EditTransactionScreen
 import com.ivy.navigation.PlannerTimelineScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.planner.domain.EntryKind
+import com.ivy.planner.ui.MoneyItem
+import com.ivy.planner.ui.MoneySummary
 import com.ivy.planner.ui.Pill
+import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerTheme
+import com.ivy.planner.ui.SectionLabel
+import com.ivy.planner.ui.shortDay
+import com.ivy.planner.ui.summarize
 import kotlinx.coroutines.launch
 
 /** The timeline of one person or one collection, with importance and type filters. */
@@ -83,6 +98,9 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var tagsDialog by remember { mutableStateOf(false) }
+    var showExpenses by remember { mutableStateOf(false) }
+    var linksVersion by remember { mutableIntStateOf(0) }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             scope.launch {
@@ -114,6 +132,22 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
         .newestFirst()
     val filtering = year != null || importance.isNotEmpty() || type != TypeFilter.ALL
     val since = all.mapNotNull { it.date }.minOrNull()
+
+    // money: wallet tags linked by you, or by matching name
+    val owner = personId ?: collectionId
+    val walletTags by produceState(initialValue = emptyList<Pair<java.util.UUID, String>>()) { value = vm.money.walletTags() }
+    val linkedTags = remember(owner, name, walletTags, linksVersion) {
+        val chosen = owner?.let { vm.prefs.tagLinks[it] }
+        if (chosen != null) {
+            walletTags.filter { it.first.toString() in chosen }
+        } else {
+            walletTags.filter { it.second.trim().equals(name.trim(), ignoreCase = true) }
+        }
+    }
+    val moneyItems by produceState(initialValue = emptyList<MoneyItem>(), linkedTags) {
+        value = vm.money.tagged(linkedTags.map { it.first }.toSet())
+    }
+    val moneySummary = remember(moneyItems) { summarize(moneyItems, java.time.LocalDate.now().year) }
 
     Scaffold { padding ->
         LazyColumn(
@@ -148,6 +182,7 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
+                            DropdownMenuItem(text = { Text("Wallet tags") }, onClick = { menu = false; tagsDialog = true })
                             DropdownMenuItem(
                                 text = { Text(if (person != null) "Change photo" else "Change cover photo") },
                                 onClick = {
@@ -170,6 +205,41 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
                         if (t == TypeFilter.ALL || count > 0) {
                             Pill(if (t == TypeFilter.ALL) "All" else "${t.label} $count", type == t, { type = t })
                         }
+                    }
+                }
+            }
+            if (!allMemories && moneyItems.isNotEmpty()) {
+                item {
+                    MoneyCard(
+                        summary = moneySummary,
+                        tags = linkedTags.map { it.second },
+                        expanded = showExpenses,
+                        onToggle = { showExpenses = !showExpenses },
+                    )
+                }
+                if (showExpenses) {
+                    items(moneyItems.take(50), key = { "m:" + it.id }) { m ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    nav.navigateTo(
+                                        EditTransactionScreen(
+                                            initialTransactionId = m.id,
+                                            type = if (m.isIncome) TransactionType.INCOME else TransactionType.EXPENSE,
+                                        ),
+                                    )
+                                }
+                                .padding(horizontal = 20.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(m.date.shortDay(), Modifier.width(96.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            Text(m.title, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1)
+                            Text(m.label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (m.isIncome) PlannerColors.Done else PlannerColors.Accent)
+                        }
+                    }
+                    if (moneyItems.size > 50) {
+                        item { Text("Showing the latest 50 of ${moneyItems.size}", Modifier.padding(horizontal = 20.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
@@ -227,6 +297,18 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
             }
         }, onDismiss = { renaming = false })
     }
+    if (tagsDialog && owner != null) {
+        WalletTagsDialog(
+            tags = walletTags,
+            selected = linkedTags.map { it.first.toString() }.toSet(),
+            onSave = { chosen ->
+                vm.prefs.tagLinks = vm.prefs.tagLinks + (owner to chosen)
+                linksVersion++
+                tagsDialog = false
+            },
+            onDismiss = { tagsDialog = false },
+        )
+    }
     if (deleting) {
         AlertDialog(
             onDismissRequest = { deleting = false },
@@ -245,4 +327,74 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
             dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
         )
     }
+}
+
+/** Money spent with a person or on a collection, from the linked wallet tags. */
+@Composable
+private fun MoneyCard(summary: MoneySummary, tags: List<String>, expanded: Boolean, onToggle: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onToggle)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel("Money · " + tags.joinToString(", ") { "#$it" })
+            Spacer(Modifier.weight(1f))
+            Text(if (expanded) "Hide" else "${summary.count} expenses", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(summary.thisYear ?: "Nothing", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = PlannerColors.Accent)
+            Text("  this year", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        summary.allTime?.let { Text("$it all time", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (summary.topCategories.isNotEmpty()) {
+            Text(summary.topCategories.joinToString(" · "), fontSize = 13.sp)
+        }
+    }
+}
+
+/** Choose which wallet tags belong to this person or collection. */
+@Composable
+private fun WalletTagsDialog(
+    tags: List<Pair<java.util.UUID, String>>,
+    selected: Set<String>,
+    onSave: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var chosen by remember { mutableStateOf(selected) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wallet tags") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (tags.isEmpty()) {
+                    Text("No tags in the wallet yet. Add tags to expenses in the Money tab, then link them here.")
+                }
+                Text(
+                    "Expenses with these tags show on this page. Without a choice, the tag with the same name is used.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                tags.forEach { (id, tagName) ->
+                    val key = id.toString()
+                    Row(
+                        Modifier.fillMaxWidth().clickable { chosen = if (key in chosen) chosen - key else chosen + key },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = key in chosen, onCheckedChange = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("#$tagName")
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(chosen) }) { Text("Save", color = PlannerColors.Accent, fontWeight = FontWeight.Bold) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

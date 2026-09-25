@@ -35,6 +35,21 @@ class PlannerPrefs @Inject constructor(
             prefs.edit().putString(KEY_IMPORTANCE, value.take(4).joinToString("\n") { it.replace("\n", " ").trim() }).apply()
         }
 
+    /**
+     * Wallet tags linked to a person or collection (owner id → tag ids), when you've chosen them.
+     * Owners without an entry are linked to the tag with the same name.
+     */
+    var tagLinks: Map<String, Set<String>>
+        get() = prefs.getStringSet(KEY_TAG_LINKS, emptySet()).orEmpty()
+            .mapNotNull { s -> s.split('|').takeIf { it.size == 2 } }
+            .groupBy({ it[0] }, { it[1] })
+            .mapValues { (_, v) -> v.filter { it.isNotEmpty() }.toSet() }
+        set(value) {
+            // an owner with no tags keeps an empty marker, so "none" isn't replaced by the name match
+            val flat = value.flatMap { (owner, tags) -> if (tags.isEmpty()) listOf("$owner|") else tags.map { "$owner|$it" } }
+            prefs.edit().putStringSet(KEY_TAG_LINKS, flat.toSet()).apply()
+        }
+
     /** Snoozed reminders: reminder key → when to remind again. Past snoozes are dropped. */
     var snoozes: Map<String, LocalDateTime>
         get() = prefs.getStringSet(KEY_SNOOZES, emptySet()).orEmpty().mapNotNull { s ->
@@ -72,6 +87,7 @@ class PlannerPrefs @Inject constructor(
         const val KEY_TODO_ONLY = "day_filter_todo_only"
         const val KEY_FOCUS_LAYOUT = "day_layout_focus"
         const val KEY_IMPORTANCE = "importance_labels"
+        const val KEY_TAG_LINKS = "wallet_tag_links"
         const val KEY_SNOOZES = "reminder_snoozes"
         const val KEY_CODES = "reminder_alarm_codes"
         const val KEY_DEFAULT_REMINDER = "default_reminder_minutes"
