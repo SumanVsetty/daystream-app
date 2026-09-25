@@ -178,3 +178,12 @@ data class PlannerTimelineScreen(
     val collectionId: String? = null,
     val importance: Int? = null,
 ) : Screen
+
+/** A routine on one day: overview, step player and completion. */
+data class PlannerRoutineScreen(val seriesId: String, val epochDay: Long) : Screen
+
+/** Create ([seriesId] null) or edit a routine and its steps. */
+data class PlannerRoutineEditScreen(val seriesId: String? = null, val epochDay: Long? = null) : Screen
+
+/** All routines. */
+data object PlannerRoutinesScreen : Screen

@@ -39,6 +39,9 @@ import com.ivy.navigation.PlannerBoardsScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.PlannerReviewScreen
+import com.ivy.navigation.PlannerRoutineEditScreen
+import com.ivy.navigation.PlannerRoutineScreen
+import com.ivy.navigation.PlannerRoutinesScreen
 import com.ivy.navigation.PlannerSearchScreen
 import com.ivy.navigation.PlannerTimelineScreen
 import com.ivy.navigation.PlannerWeekScreen
@@ -58,6 +61,9 @@ import com.ivy.planner.ui.day.PlannerDayScreenImpl
 import com.ivy.planner.ui.edit.PlannerEditScreenImpl
 import com.ivy.planner.ui.journal.PlannerTimelineScreenImpl
 import com.ivy.planner.ui.review.PlannerReviewScreenImpl
+import com.ivy.planner.ui.routines.PlannerRoutineEditScreenImpl
+import com.ivy.planner.ui.routines.PlannerRoutineScreenImpl
+import com.ivy.planner.ui.routines.PlannerRoutinesScreenImpl
 import com.ivy.planner.ui.search.PlannerSearchScreenImpl
 import com.ivy.planner.ui.week.PlannerWeekScreenImpl
 import com.ivy.poll.impl.ui.PollScreen
@@ -109,5 +115,8 @@ fun BoxWithConstraintsScope.IvyNavGraph(screen: Screen?) {
         PlannerSearchScreen -> PlannerSearchScreenImpl()
         is PlannerBoardsScreen -> PlannerBoardsScreenImpl(screen = screen)
         is PlannerTimelineScreen -> PlannerTimelineScreenImpl(screen = screen)
+        is PlannerRoutineScreen -> PlannerRoutineScreenImpl(screen = screen)
+        is PlannerRoutineEditScreen -> PlannerRoutineEditScreenImpl(screen = screen)
+        PlannerRoutinesScreen -> PlannerRoutinesScreenImpl()
     }
 }

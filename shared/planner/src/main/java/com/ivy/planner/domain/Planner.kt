@@ -54,6 +54,8 @@ data class Series(
     val paused: Boolean = false,
     val stepCount: Int = 0,
     val durationMinutes: Int? = null,
+    /** A routine: a repeating task with steps, done one step at a time. */
+    val isRoutine: Boolean = false,
 )
 
 /**

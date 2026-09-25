@@ -16,6 +16,7 @@ import com.ivy.planner.data.LibraryRepository
 import com.ivy.planner.data.PlannerPrefs
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.data.PlannerSnapshot
+import com.ivy.planner.data.RoutineRepository
 import com.ivy.planner.domain.AutoTime
 import com.ivy.planner.domain.DayItem
 import com.ivy.planner.domain.Entry
@@ -70,6 +71,9 @@ data class DayRow(
     val importance: Int = 0,
     val tags: List<RowTag> = emptyList(),
     val photos: List<File> = emptyList(),
+    val isRoutine: Boolean = false,
+    /** For routines: steps done and total today. */
+    val routine: Pair<Int, Int>? = null,
 )
 
 @Immutable
@@ -101,6 +105,7 @@ sealed interface DayEvent {
 class DayViewModel @Inject constructor(
     private val repository: PlannerRepository,
     private val library: LibraryRepository,
+    private val routines: RoutineRepository,
     private val moneySource: MoneySource,
     private val prefs: PlannerPrefs,
 ) : ComposeViewModel<DayState, DayEvent>() {
@@ -122,12 +127,17 @@ class DayViewModel @Inject constructor(
             value = moneySource.between(week.monday, week.sunday)
         }
         val lib by remember { library.observe() }.collectAsState(initial = null)
+        val routineSteps by remember { routines.observeSteps() }.collectAsState(initial = emptyMap())
+        val stepStates by remember(week) { routines.observeStates(week.monday) }.collectAsState(initial = emptyMap())
 
         val s = snapshot ?: return DayState(
             date, today, "", persistentListOf(), persistentListOf(), persistentMapOf(),
             todoOnly, null,
         )
-        val allRows = (itemsFor(s, date, today).map { it.toRow(s, today).withLibrary(lib) } + money.filter { it.date == date }.map { it.toRow() })
+        val allRows = (
+            itemsFor(s, date, today).map { it.toRow(s, today).withLibrary(lib).withRoutine(routineSteps, stepStates) } +
+                money.filter { it.date == date }.map { it.toRow() }
+            )
             .sortedWith(compareBy<DayRow>({ it.time != null }, { it.time }, { it.title.lowercase() }))
         val isToday = date == today
         val rows = if (todoOnly) allRows.filter { it.isToDo(isToday, now) } else allRows
@@ -236,6 +246,7 @@ class DayViewModel @Inject constructor(
                 date = date,
                 time = sortTime,
                 durationMinutes = series.durationMinutes,
+                isRoutine = series.isRoutine,
             )
         }
     }
@@ -255,6 +266,19 @@ class DayViewModel @Inject constructor(
         time = time,
         money = this,
     )
+
+    /** Routine progress for the day ("3 of 7 steps"). */
+    private fun DayRow.withRoutine(
+        steps: Map<String, List<com.ivy.planner.domain.RoutineStep>>,
+        states: Map<String, Map<String, com.ivy.planner.domain.StepState>>,
+    ): DayRow {
+        val id = seriesId ?: return this
+        val list = steps[id] ?: return this
+        if (!isRoutine) return this
+        val progress = com.ivy.planner.domain.RoutineProgress(list, states["$id@$date"].orEmpty())
+        val done = if (state == EntryState.DONE) progress.total else progress.done
+        return copy(routine = done to progress.total, meta = (listOf("$done of ${progress.total} steps") + meta).filter { it.isNotBlank() }.joinToString(" · "))
+    }
 
     /** Adds board / collection tags, people and photos from the library. */
     private fun DayRow.withLibrary(lib: Library?): DayRow {
@@ -277,7 +301,7 @@ class DayViewModel @Inject constructor(
             }
             is DayEvent.Toggle -> viewModelScope.launch {
                 val row = event.row
-                if (row.money != null || row.kind != EntryKind.TASK) return@launch
+                if (row.money != null || row.kind != EntryKind.TASK || row.routine != null) return@launch
                 val newState = if (row.state == EntryState.DONE) EntryState.OPEN else EntryState.DONE
                 if (row.entryId != null) {
                     repository.setState(row.entryId, newState)

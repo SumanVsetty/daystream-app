@@ -24,9 +24,11 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.ViewKanban
 import androidx.compose.material3.DropdownMenu
@@ -61,6 +63,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.ivy.navigation.PlannerBoardsScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerReviewScreen
+import com.ivy.navigation.PlannerRoutinesScreen
 import com.ivy.navigation.PlannerWeekScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
@@ -72,6 +75,7 @@ import com.ivy.planner.ui.CheckCircle
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.RapidLog
+import com.ivy.planner.ui.RoutineRing
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.ShortDayFmt
 import com.ivy.planner.ui.shortDay
@@ -144,11 +148,26 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
                                 fontWeight = FontWeight.Bold,
                             )
                         }
-                        IconButton(onClick = { nav.navigateTo(PlannerBoardsScreen()) }) {
-                            Icon(Icons.Outlined.ViewKanban, "Boards", tint = PlannerColors.Accent)
-                        }
-                        IconButton(onClick = { nav.navigateTo(PlannerReviewScreen) }) {
-                            Icon(Icons.Outlined.FactCheck, "Weekly review", tint = PlannerColors.Accent)
+                        Box {
+                            var menu by remember { mutableStateOf(false) }
+                            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More", tint = PlannerColors.Accent) }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Boards") },
+                                    leadingIcon = { Icon(Icons.Outlined.ViewKanban, null) },
+                                    onClick = { menu = false; nav.navigateTo(PlannerBoardsScreen()) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Routines") },
+                                    leadingIcon = { Icon(Icons.Outlined.PlayCircle, null) },
+                                    onClick = { menu = false; nav.navigateTo(PlannerRoutinesScreen) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Weekly review") },
+                                    leadingIcon = { Icon(Icons.Outlined.FactCheck, null) },
+                                    onClick = { menu = false; nav.navigateTo(PlannerReviewScreen) },
+                                )
+                            }
                         }
                     }
                 }
@@ -253,8 +272,9 @@ private fun WeekLine(line: WeekDayLine, onToggle: () -> Unit) {
     val finished = line.state == EntryState.DONE || line.state == EntryState.MISSED || line.state == EntryState.SKIPPED
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 1.dp)) {
         Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-            when (line.kind) {
-                EntryKind.TASK -> Box(
+            when {
+                line.isRoutine -> RoutineRing(if (line.state == EntryState.DONE) 1 else 0, 1, size = 16.dp)
+                line.kind == EntryKind.TASK -> Box(
                     Modifier
                         .size(18.dp)
                         .clip(CircleShape)
@@ -269,9 +289,9 @@ private fun WeekLine(line: WeekDayLine, onToggle: () -> Unit) {
                         Icon(Icons.Filled.Check, contentDescription = "Done", tint = PlannerColors.OnDone, modifier = Modifier.size(12.dp))
                     }
                 }
-                EntryKind.EVENT -> Icon(Icons.Outlined.CalendarToday, contentDescription = "Event", tint = PlannerColors.Event, modifier = Modifier.size(16.dp))
-                EntryKind.JOURNAL -> Icon(Icons.Filled.Star, contentDescription = "Journal", tint = PlannerColors.Journal, modifier = Modifier.size(16.dp))
-                EntryKind.NOTE -> Box(Modifier.size(7.dp).clip(CircleShape).background(PlannerColors.Done))
+                line.kind == EntryKind.EVENT -> Icon(Icons.Outlined.CalendarToday, contentDescription = "Event", tint = PlannerColors.Event, modifier = Modifier.size(16.dp))
+                line.kind == EntryKind.JOURNAL -> Icon(Icons.Filled.Star, contentDescription = "Journal", tint = PlannerColors.Journal, modifier = Modifier.size(16.dp))
+                else -> Box(Modifier.size(7.dp).clip(CircleShape).background(PlannerColors.Done))
             }
         }
         Spacer(Modifier.width(6.dp))

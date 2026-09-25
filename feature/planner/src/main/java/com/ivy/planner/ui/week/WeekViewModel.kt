@@ -45,6 +45,7 @@ data class WeekDayLine(
     val entryId: String?,
     val seriesId: String?,
     val date: LocalDate,
+    val isRoutine: Boolean = false,
 )
 
 @Immutable
@@ -149,6 +150,7 @@ class WeekViewModel @Inject constructor(
             entryId = null,
             seriesId = series.id,
             date = date,
+            isRoutine = series.isRoutine,
         )
     }
 
@@ -168,7 +170,7 @@ class WeekViewModel @Inject constructor(
             }
             is WeekEvent.ToggleLine -> viewModelScope.launch {
                 val line = event.line
-                if (line.kind != EntryKind.TASK) return@launch
+                if (line.kind != EntryKind.TASK || line.isRoutine) return@launch
                 val newState = if (line.state == EntryState.DONE) EntryState.OPEN else EntryState.DONE
                 if (line.entryId != null) {
                     repository.setState(line.entryId, newState)

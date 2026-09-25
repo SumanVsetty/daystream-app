@@ -84,4 +84,13 @@ class RepeatScheduleTest {
         s.dueAfterCompletion(null) shouldBe d(9, 24)
         s.dueAfterCompletion(d(9, 26)) shouldBe d(9, 29)
     }
+
+    @Test
+    fun `a one-off schedule happens once`() {
+        val s = RepeatSchedule.once(d(9, 26))
+        s.isOnce shouldBe true
+        s.occurrencesBetween(d(9, 1), d(10, 31)) shouldBe listOf(d(9, 26))
+        RepeatCodec.describe(s) shouldBe "Once"
+        RepeatSchedule(RepeatRule.Daily(), d(9, 26)).isOnce shouldBe false
+    }
 }

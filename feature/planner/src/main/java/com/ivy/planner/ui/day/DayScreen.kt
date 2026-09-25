@@ -65,6 +65,7 @@ import com.ivy.navigation.EditTransactionScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.PlannerReviewScreen
+import com.ivy.navigation.PlannerRoutineScreen
 import com.ivy.navigation.PlannerSearchScreen
 import com.ivy.navigation.PlannerWeekScreen
 import com.ivy.navigation.navigation
@@ -108,7 +109,7 @@ fun PlannerDayTab() {
 private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) {
     val nav = navigation()
     var monthOpen by remember { mutableStateOf(false) }
-    val colors = state.rows.map { timelineColor(it.kind, it.state, isMoney = it.money != null, importance = it.importance) }
+    val colors = state.rows.map { timelineColor(it.kind, it.state, isMoney = it.money != null, importance = it.importance, isRoutine = it.routine != null) }
     val listState = rememberLazyListState()
 
     // notifications need permission on Android 13+; a slim banner asks until it's allowed
@@ -236,9 +237,13 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                         tags = row.tags,
                         photos = row.photos,
                         trailing = row.trailing,
+                        routine = row.routine,
                         onClick = {
                             val m = row.money
-                            if (m != null) {
+                            val routineId = row.seriesId
+                            if (row.routine != null && routineId != null) {
+                                nav.navigateTo(PlannerRoutineScreen(routineId, row.date.toEpochDay()))
+                            } else if (m != null) {
                                 nav.navigateTo(
                                     EditTransactionScreen(
                                         initialTransactionId = m.id,

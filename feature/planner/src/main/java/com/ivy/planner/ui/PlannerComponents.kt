@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CurrencyRupee
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Repeat
@@ -150,8 +151,9 @@ fun EntryLeading(kind: EntryKind, state: EntryState, onToggle: () -> Unit, impor
 
 /** The colour of an entry's timeline segment. */
 @Composable
-fun timelineColor(kind: EntryKind, state: EntryState, isMoney: Boolean = false, importance: Int = 0): Color = when {
+fun timelineColor(kind: EntryKind, state: EntryState, isMoney: Boolean = false, importance: Int = 0, isRoutine: Boolean = false): Color = when {
     isMoney -> PlannerColors.Accent
+    isRoutine -> PlannerColors.Routine
     kind == EntryKind.EVENT -> PlannerColors.Event
     kind == EntryKind.JOURNAL -> importanceColor(importance)
     kind == EntryKind.NOTE -> MaterialTheme.colorScheme.outlineVariant
@@ -187,6 +189,8 @@ fun EntryRow(
     photos: List<File> = emptyList(),
     /** Small muted text at the right end of the title line, e.g. "15 min" or "All day". */
     trailing: String = "",
+    /** For routines: steps done and total, shown as a progress ring. */
+    routine: Pair<Int, Int>? = null,
 ) {
     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -223,7 +227,11 @@ fun EntryRow(
                 },
             contentAlignment = Alignment.TopCenter,
         ) {
-            if (moneyLabel != null) MoneyBadge(moneyIsIncome) else EntryLeading(kind, state, onToggle, importance)
+            when {
+                moneyLabel != null -> MoneyBadge(moneyIsIncome)
+                routine != null -> RoutineRing(routine.first, routine.second)
+                else -> EntryLeading(kind, state, onToggle, importance)
+            }
         }
         Column(Modifier.weight(1f).padding(start = 6.dp, top = 4.dp, end = 6.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.Top) {
@@ -566,5 +574,32 @@ fun Pill(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifi
             fontWeight = FontWeight.Bold,
             color = if (selected) PlannerColors.OnAccent else MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** Lavender progress ring with a small play symbol: a routine on the timeline. */
+@Composable
+fun RoutineRing(done: Int, total: Int, size: Dp = 20.dp) {
+    val track = MaterialTheme.colorScheme.outlineVariant
+    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(size)
+                .drawBehind {
+                    val stroke = 2.5.dp.toPx()
+                    val inset = stroke / 2
+                    val arcSize = androidx.compose.ui.geometry.Size(this.size.width - stroke, this.size.height - stroke)
+                    drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+                    if (total > 0 && done > 0) {
+                        drawArc(
+                            PlannerColors.Routine, -90f, 360f * done / total, false, Offset(inset, inset), arcSize,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = "Routine", tint = PlannerColors.Routine, modifier = Modifier.size(size * 0.55f))
+        }
     }
 }

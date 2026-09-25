@@ -62,10 +62,11 @@ fun SeriesEntity.toDomain(): Series? {
         schedule = RepeatSchedule(rule, startDate.toLocalDate(), RepeatCodec.decodeEnd(endRule)),
         paused = paused,
         durationMinutes = durationMinutes,
+        isRoutine = isRoutine,
     )
 }
 
-fun Series.toEntity(createdAt: Long, now: Long, isRoutine: Boolean = false): SeriesEntity = SeriesEntity(
+fun Series.toEntity(createdAt: Long, now: Long): SeriesEntity = SeriesEntity(
     id = id,
     kind = kind.name,
     title = title,

@@ -82,6 +82,14 @@ data class RepeatSchedule(
 
     val isCalendarBased: Boolean get() = rule !is RepeatRule.AfterCompletion
 
+    /** Happens once only, on [start] (used for one-off routines). */
+    val isOnce: Boolean get() = end is RepeatEnd.OnDate && end.lastDate == start && rule is RepeatRule.Daily
+
+    companion object {
+        /** A schedule that happens once, on [date]. */
+        fun once(date: LocalDate) = RepeatSchedule(RepeatRule.Daily(1), date, RepeatEnd.OnDate(date))
+    }
+
     /** Whether the rule's pattern matches [date], ignoring the end condition. */
     private fun matchesPattern(date: LocalDate): Boolean {
         if (date.isBefore(start)) return false

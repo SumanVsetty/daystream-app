@@ -69,7 +69,8 @@ object RepeatCodec {
     }
 
     /** Plain-English description, e.g. "Every 2 weeks on Tuesday and Thursday". */
-    fun describe(schedule: RepeatSchedule): String = describe(schedule.rule) + describeEnd(schedule.end)
+    fun describe(schedule: RepeatSchedule): String =
+        if (schedule.isOnce) "Once" else describe(schedule.rule) + describeEnd(schedule.end)
 
     fun describe(rule: RepeatRule): String {
         val n = rule.interval

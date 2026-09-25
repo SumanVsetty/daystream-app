@@ -22,6 +22,7 @@ import com.ivy.navigation.EditPlannedScreen
 import com.ivy.navigation.EditTransactionScreen
 import com.ivy.navigation.MainScreen
 import com.ivy.navigation.PlannerEditScreen
+import com.ivy.navigation.PlannerRoutineEditScreen
 import com.ivy.navigation.navigation
 import com.ivy.planner.ui.PlannerSelection
 import com.ivy.planner.ui.day.PlannerDayTab
@@ -114,7 +115,11 @@ private fun BoxWithConstraintsScope.UI(
         },
 
         onAddPlannerEntry = { kind ->
-            nav.navigateTo(PlannerEditScreen(epochDay = PlannerSelection.date.toEpochDay(), kind = kind))
+            if (kind == "ROUTINE") {
+                nav.navigateTo(PlannerRoutineEditScreen(epochDay = PlannerSelection.date.toEpochDay()))
+            } else {
+                nav.navigateTo(PlannerEditScreen(epochDay = PlannerSelection.date.toEpochDay(), kind = kind))
+            }
         },
         showAddAccountModal = {
             accountModalData = AccountModalData(

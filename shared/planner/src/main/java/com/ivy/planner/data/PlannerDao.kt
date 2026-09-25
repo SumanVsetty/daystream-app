@@ -113,6 +113,30 @@ interface StepDao {
 
     @Query("DELETE FROM steps WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("SELECT * FROM steps WHERE series_id IS NOT NULL ORDER BY position")
+    fun observeRoutineSteps(): Flow<List<StepEntity>>
+
+    @Query("DELETE FROM steps WHERE series_id = :seriesId")
+    suspend fun deleteForSeries(seriesId: String)
+}
+
+@Dao
+interface OccurrenceStepDao {
+    @Upsert
+    suspend fun upsert(state: OccurrenceStepEntity)
+
+    @Query("DELETE FROM occurrence_steps WHERE series_id = :seriesId AND date = :date AND step_id = :stepId")
+    suspend fun delete(seriesId: String, date: Long, stepId: String)
+
+    @Query("SELECT * FROM occurrence_steps WHERE date >= :from")
+    fun observeSince(from: Long): Flow<List<OccurrenceStepEntity>>
+
+    @Query("SELECT * FROM occurrence_steps WHERE series_id = :seriesId AND date = :date")
+    suspend fun forDay(seriesId: String, date: Long): List<OccurrenceStepEntity>
+
+    @Query("DELETE FROM occurrence_steps WHERE series_id = :seriesId AND date = :date")
+    suspend fun clearDay(seriesId: String, date: Long)
 }
 
 @Dao

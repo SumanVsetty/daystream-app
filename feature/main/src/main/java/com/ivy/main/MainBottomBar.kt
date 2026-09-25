@@ -91,7 +91,7 @@ fun BoxWithConstraintsScope.BottomBar(
     onAddExpense: () -> Unit,
     onAddTransfer: () -> Unit,
     onAddPlannedPayment: () -> Unit,
-    /** Opens the planner editor for "TASK", "EVENT" or "NOTE". */
+    /** Opens the planner editor for "TASK", "EVENT", "NOTE", "JOURNAL", or the routine editor for "ROUTINE". */
     onAddPlannerEntry: (String) -> Unit,
 
     showAddAccountModal: () -> Unit,
@@ -703,7 +703,7 @@ private fun RowScope.Tab(
     }
 }
 
-/** Planner add menu: Task on top, then Event, Note and Expense, in the wallet's style. */
+/** Planner add menu: Task on top; then Event, Note, Expense; then Routine and Journal. */
 @Composable
 private fun BoxWithConstraintsScope.PlannerAddMenu(
     onPick: (String) -> Unit,
@@ -729,6 +729,11 @@ private fun BoxWithConstraintsScope.PlannerAddMenu(
                 PlannerAddButton("Event", Color(0xFF9DBBEF), Color(0xFF132238), "▦") { onPick("EVENT") }
                 PlannerAddButton("Note", Color(0xFFE4E6E1), Color(0xFF1B1D1B), "•") { onPick("NOTE") }
                 PlannerAddButton("Expense", Color(0xFFF2A48C), Color(0xFF3A1D14), "₹") { onPick("EXPENSE") }
+            }
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                PlannerAddButton("Routine", Color(0xFFC3B1EC), Color(0xFF241A3D), "▶") { onPick("ROUTINE") }
+                PlannerAddButton("Journal", Color(0xFFF2D38C), Color(0xFF3A2E0E), "★") { onPick("JOURNAL") }
             }
         }
     }
