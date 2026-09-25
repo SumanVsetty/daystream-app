@@ -1,0 +1,876 @@
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/PlannerFormat.kt b/feature/planner/src/main/java/com/ivy/planner/ui/PlannerFormat.kt
+index 1675a57..3389e9f 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/PlannerFormat.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/PlannerFormat.kt
+@@ -31,8 +31,12 @@ internal val TimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+ internal val DayTitleFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE, d MMM", Locale.ENGLISH)
+ internal val ShortDayFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
+ 
+-/** "W39 · Thu 24 Sep" */
+-internal fun LocalDate.withWeek(): String = "W${isoWeek().week} · ${format(ShortDayFmt)}"
++/** "W39 · Thu 24 Sep", with the year when it isn't this year: "W43 · Fri 29 Oct 2010". */
++internal fun LocalDate.withWeek(): String = "W${isoWeek().week} · ${shortDay()}"
++
++/** "Thu 24 Sep", or "Fri 29 Oct 2010" outside the current year. */
++internal fun LocalDate.shortDay(): String =
++    format(ShortDayFmt) + if (year != LocalDate.now().year) " $year" else ""
+ 
+ internal fun LocalTime.label(): String = format(TimeFmt)
+ 
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/boards/BoardsScreen.kt b/feature/planner/src/main/java/com/ivy/planner/ui/boards/BoardsScreen.kt
+index daaca7f..3161c3e 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/boards/BoardsScreen.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/boards/BoardsScreen.kt
+@@ -68,9 +68,10 @@ import com.ivy.planner.ui.journal.NameDialog
+ import com.ivy.planner.ui.journal.openEntry
+ import com.ivy.planner.ui.journal.toggleEntry
+ import com.ivy.planner.ui.label
++import com.ivy.planner.ui.shortDay
+ import com.ivy.planner.ui.timelineColor
+-import kotlinx.coroutines.launch
+ import java.time.LocalDate
++import kotlinx.coroutines.launch
+ 
+ @Composable
+ fun PlannerBoardsScreenImpl(screen: PlannerBoardsScreen) {
+@@ -271,7 +272,7 @@ private fun BoardRow(
+             title = e.title,
+             description = e.description,
+             meta = listOfNotNull(
+-                e.date?.let { if (it == today) "Today" else it.format(ShortDayFmt) },
++                e.date?.let { if (it == today) "Today" else it.shortDay() },
+                 if (late) "overdue" else null,
+             ).joinToString(" · "),
+             state = e.state,
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/journal/JournalTab.kt b/feature/planner/src/main/java/com/ivy/planner/ui/journal/JournalTab.kt
+index 2422828..d422771 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/journal/JournalTab.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/journal/JournalTab.kt
+@@ -1,5 +1,6 @@
+ package com.ivy.planner.ui.journal
+ 
++import androidx.compose.foundation.ExperimentalFoundationApi
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+ import androidx.compose.foundation.clickable
+@@ -17,11 +18,14 @@ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.pager.HorizontalPager
++import androidx.compose.foundation.pager.rememberPagerState
+ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.shape.CircleShape
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.Add
++import androidx.compose.material.icons.filled.Star
+ import androidx.compose.material.icons.outlined.Search
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+@@ -40,10 +44,12 @@ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.layout.ContentScale
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import androidx.lifecycle.ViewModel
++import coil.compose.AsyncImage
+ import com.ivy.navigation.PlannerEditScreen
+ import com.ivy.navigation.PlannerSearchScreen
+ import com.ivy.navigation.PlannerTimelineScreen
+@@ -55,12 +61,18 @@ import com.ivy.planner.domain.CollectionType
+ import com.ivy.planner.domain.Entry
+ import com.ivy.planner.domain.EntryKind
+ import com.ivy.planner.domain.EntryState
++import com.ivy.planner.domain.Memories
++import com.ivy.planner.domain.Memory
++import com.ivy.planner.domain.RepeatRule
+ import com.ivy.planner.ui.PlannerColors
+ import com.ivy.planner.ui.PlannerTheme
+ import com.ivy.planner.ui.SectionLabel
++import com.ivy.planner.ui.importanceColor
++import com.ivy.planner.ui.withWeek
+ import dagger.hilt.android.lifecycle.HiltViewModel
+-import kotlinx.coroutines.launch
++import java.time.LocalDate
+ import javax.inject.Inject
++import kotlinx.coroutines.launch
+ 
+ /** Gives the journal screens access to the planner's data. */
+ @HiltViewModel
+@@ -90,16 +102,26 @@ private fun JournalUi(vm: JournalViewModel) {
+     val nav = navigation()
+     val scope = rememberCoroutineScope()
+     val lib by remember { vm.library.observe() }.collectAsState(initial = null)
+-    var importance by remember { mutableStateOf(setOf<Int>()) }
++    val series by remember { vm.planner.observeSeries() }.collectAsState(initial = emptyList())
+     var addPerson by remember { mutableStateOf(false) }
+     var addCollection by remember { mutableStateOf(false) }
++    val today = LocalDate.now()
+ 
+     Scaffold { padding ->
+         val l = lib
+-        val entries = l?.entries.orEmpty()
+-            .filter { it.kind == EntryKind.JOURNAL || it.kind == EntryKind.NOTE }
+-            .filter { importance.isEmpty() || it.importance in importance }
+-            .newestFirst()
++        val journal = l?.entries.orEmpty().filter { it.kind == EntryKind.JOURNAL || it.kind == EntryKind.NOTE }
++        val memories = remember(l, series, today) {
++            if (l == null) emptyList() else Memories.pick(
++                today = today,
++                entries = l.entries,
++                peopleOf = l.peopleOf,
++                personName = { id -> l.person(id)?.name },
++                yearlyEvents = series
++                    .filter { it.kind == EntryKind.EVENT && (it.schedule.rule as? RepeatRule.MonthlyOnDay)?.interval == 12 }
++                    .mapNotNull { s -> s.schedule.nextOnOrAfter(today.plusDays(1))?.let { s.title to it } },
++            )
++        }
++        val since = journal.mapNotNull { it.date?.year }.minOrNull()
+         LazyColumn(
+             modifier = Modifier.fillMaxSize(),
+             contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 110.dp),
+@@ -109,9 +131,7 @@ private fun JournalUi(vm: JournalViewModel) {
+                     Column(Modifier.weight(1f)) {
+                         Text("Journal", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                         Text(
+-                            "${l?.entries.orEmpty().count { it.kind == EntryKind.JOURNAL }} entries · " +
+-                                "${l?.people.orEmpty().size} people · " +
+-                                "${l?.collections.orEmpty().count { it.type == CollectionType.TOPIC }} collections",
++                            "${journal.count { it.kind == EntryKind.JOURNAL }} memories" + (since?.let { " · since $it" } ?: ""),
+                             fontSize = 12.sp,
+                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                         )
+@@ -119,71 +139,101 @@ private fun JournalUi(vm: JournalViewModel) {
+                     IconButton(onClick = { nav.navigateTo(PlannerSearchScreen) }) { Icon(Icons.Outlined.Search, "Search") }
+                 }
+             }
+-            // people
++            // importance cards: tap to see that level
+             item {
+-                Column(Modifier.padding(top = 10.dp)) {
+-                    Box(Modifier.padding(start = 20.dp)) { SectionLabel("People", MaterialTheme.colorScheme.onSurfaceVariant) }
+-                    Row(
+-                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+-                    ) {
+-                        l?.people.orEmpty().forEach { p ->
+-                            Column(
+-                                Modifier.clickable { nav.navigateTo(PlannerTimelineScreen(personId = p.id)) },
+-                                horizontalAlignment = Alignment.CenterHorizontally,
+-                            ) {
+-                                PersonAvatar(p.name)
+-                                Text(p.name, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(top = 4.dp).width(56.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+-                            }
+-                        }
+-                        Column(Modifier.clickable { addPerson = true }, horizontalAlignment = Alignment.CenterHorizontally) {
+-                            Box(
+-                                Modifier.size(44.dp).clip(CircleShape).border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+-                                contentAlignment = Alignment.Center,
+-                            ) { Icon(Icons.Filled.Add, "Add person", tint = PlannerColors.Accent) }
+-                            Text("Add", fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
++                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                    listOf("Cool", "Unusual", "Important", "Life-changing").forEachIndexed { i, label ->
++                        val level = i + 1
++                        Column(
++                            Modifier
++                                .weight(1f)
++                                .clip(RoundedCornerShape(14.dp))
++                                .background(MaterialTheme.colorScheme.surfaceVariant)
++                                .clickable { nav.navigateTo(PlannerTimelineScreen(importance = level)) }
++                                .padding(10.dp),
++                        ) {
++                            Box(Modifier.size(9.dp).clip(CircleShape).background(importanceColor(level)))
++                            Text("${journal.count { it.importance == level }}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
++                            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                         }
+                     }
+                 }
+             }
+-            // collections
++            if (l != null && memories.isNotEmpty()) {
++                item { MemoriesCard(memories, l, vm, nav) }
++            }
++            // people
+             item {
+-                Column {
+-                    Box(Modifier.padding(start = 20.dp)) { SectionLabel("Collections", MaterialTheme.colorScheme.onSurfaceVariant) }
+-                    Row(
+-                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+-                    ) {
+-                        l?.collections.orEmpty().filter { it.type == CollectionType.TOPIC }.forEach { c ->
+-                            Row(
+-                                Modifier
+-                                    .clip(RoundedCornerShape(12.dp))
+-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+-                                    .clickable { nav.navigateTo(PlannerTimelineScreen(collectionId = c.id)) }
+-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+-                                verticalAlignment = Alignment.CenterVertically,
+-                            ) {
+-                                Box(Modifier.size(8.dp).clip(CircleShape).background(Color(c.color)))
+-                                Spacer(Modifier.width(6.dp))
+-                                Text(c.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+-                            }
+-                        }
+-                        TextButton(onClick = { addCollection = true }) { Text("+ New", color = PlannerColors.Accent, fontWeight = FontWeight.Bold) }
++                SectionHeader("People")
++                Row(
++                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
++                    horizontalArrangement = Arrangement.spacedBy(10.dp),
++                ) {
++                    l?.people.orEmpty().forEach { p ->
++                        val ids = l?.peopleOf.orEmpty().filterValues { p.id in it }.keys
++                        val theirs = l?.entries.orEmpty().filter { it.id in ids }
++                        val latest = theirs.filter { it.date != null }.maxByOrNull { it.date!! }
++                        InfoCard(
++                            onClick = { nav.navigateTo(PlannerTimelineScreen(personId = p.id)) },
++                            top = {
++                                Row(verticalAlignment = Alignment.CenterVertically) {
++                                    PersonAvatar(p.name, size = 38)
++                                    Spacer(Modifier.width(10.dp))
++                                    Column {
++                                        Text(p.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
++                                        Text("${theirs.size} memories", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
++                                    }
++                                }
++                            },
++                            bottom = latest?.let { "Latest: ${it.title}" },
++                        )
+                     }
++                    AddCard("Add person") { addPerson = true }
+                 }
+             }
++            // collections: milestone timelines
+             item {
+-                ImportanceFilter(
+-                    selected = importance,
+-                    onToggle = { importance = if (it in importance) importance - it else importance + it },
+-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+-                )
++                SectionHeader("Collections")
++                Row(
++                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
++                    horizontalArrangement = Arrangement.spacedBy(10.dp),
++                ) {
++                    l?.collections.orEmpty().filter { it.type == CollectionType.TOPIC }.forEach { c ->
++                        val theirs = l?.entries.orEmpty().filter { c.id in l?.collectionsOf?.get(it.id).orEmpty() }
++                        val latest = theirs.filter { it.date != null }.maxByOrNull { it.date!! }
++                        val first = theirs.mapNotNull { it.date?.year }.minOrNull()
++                        InfoCard(
++                            onClick = { nav.navigateTo(PlannerTimelineScreen(collectionId = c.id)) },
++                            accent = Color(c.color),
++                            top = {
++                                Column {
++                                    Text(c.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
++                                    Text(
++                                        "${theirs.size} milestones" + (first?.let { " · since $it" } ?: ""),
++                                        fontSize = 12.sp,
++                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                                    )
++                                }
++                            },
++                            bottom = latest?.let { "Latest: ${it.title}" },
++                        )
++                    }
++                    AddCard("New collection") { addCollection = true }
++                }
+             }
+-            if (l != null && entries.isEmpty()) {
++            // recent
++            item {
++                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
++                    Box(Modifier.weight(1f)) { SectionLabel("Recent", MaterialTheme.colorScheme.onSurfaceVariant) }
++                    TextButton(onClick = { nav.navigateTo(PlannerTimelineScreen()) }) {
++                        Text("Timeline", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
++                    }
++                }
++            }
++            if (l != null && journal.isEmpty()) {
+                 item {
+                     Text(
+-                        if (importance.isEmpty()) "Your journal is empty. Tap the logo to write your first entry."
+-                        else "No entries with this importance.",
++                        "Your journal is empty. Tap the logo to write your first entry, or log an older memory with its date.",
+                         modifier = Modifier.padding(20.dp),
+                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                     )
+@@ -191,7 +241,7 @@ private fun JournalUi(vm: JournalViewModel) {
+             }
+             if (l != null) {
+                 libraryTimeline(
+-                    entries = entries,
++                    entries = journal.newestFirst().take(10),
+                     lib = l,
+                     photoFile = vm.library::photoFile,
+                     onOpen = { openEntry(nav, it) },
+@@ -215,3 +265,119 @@ private fun JournalUi(vm: JournalViewModel) {
+         }, onDismiss = { addCollection = false })
+     }
+ }
++
++@Composable
++private fun SectionHeader(title: String) {
++    Box(Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp)) {
++        SectionLabel(title, MaterialTheme.colorScheme.onSurfaceVariant)
++    }
++}
++
++/** A wallet-style card: a top part, an optional "Latest: …" line, and a coloured top edge. */
++@Composable
++private fun InfoCard(
++    onClick: () -> Unit,
++    top: @Composable () -> Unit,
++    bottom: String?,
++    accent: Color? = null,
++) {
++    Column(
++        Modifier
++            .width(168.dp)
++            .clip(RoundedCornerShape(18.dp))
++            .background(MaterialTheme.colorScheme.surfaceVariant)
++            .clickable(onClick = onClick),
++    ) {
++        if (accent != null) Box(Modifier.fillMaxWidth().height(4.dp).background(accent))
++        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
++            top()
++            if (bottom != null) {
++                Text(bottom, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
++            }
++        }
++    }
++}
++
++@Composable
++private fun AddCard(label: String, onClick: () -> Unit) {
++    Box(
++        Modifier
++            .width(110.dp)
++            .height(96.dp)
++            .clip(RoundedCornerShape(18.dp))
++            .border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
++            .clickable(onClick = onClick),
++        contentAlignment = Alignment.Center,
++    ) {
++        Text("+ $label", color = PlannerColors.Accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
++    }
++}
++
++/** Swipe sideways through today's memories; dots show how many there are. */
++@OptIn(ExperimentalFoundationApi::class)
++@Composable
++private fun MemoriesCard(
++    memories: List<Memory>,
++    lib: com.ivy.planner.data.Library,
++    vm: JournalViewModel,
++    nav: com.ivy.navigation.Navigation,
++) {
++    val pager = rememberPagerState(pageCount = { memories.size })
++    Column(Modifier.padding(top = 4.dp)) {
++        HorizontalPager(state = pager, contentPadding = PaddingValues(horizontal = 16.dp), pageSpacing = 10.dp) { page ->
++            val m = memories[page]
++            val entry = m.entryId?.let { id -> lib.entries.firstOrNull { it.id == id } }
++            val photo = m.entryId?.let { lib.photosOf[it]?.firstOrNull() }?.let(vm.library::photoFile)
++            val people = m.entryId?.let { lib.peopleOf[it] }.orEmpty().mapNotNull { lib.person(it)?.name }
++            Row(
++                Modifier
++                    .fillMaxWidth()
++                    .clip(RoundedCornerShape(18.dp))
++                    .background(MaterialTheme.colorScheme.surfaceVariant)
++                    .clickable(enabled = entry != null) { entry?.let { openEntry(nav, it) } }
++                    .padding(14.dp),
++                verticalAlignment = Alignment.CenterVertically,
++            ) {
++                if (photo != null) {
++                    AsyncImage(
++                        model = photo,
++                        contentDescription = "Photo",
++                        contentScale = ContentScale.Crop,
++                        modifier = Modifier.size(60.dp).clip(RoundedCornerShape(12.dp)),
++                    )
++                } else {
++                    Box(
++                        Modifier.size(60.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface),
++                        contentAlignment = Alignment.Center,
++                    ) {
++                        Icon(Icons.Filled.Star, contentDescription = null, tint = importanceColor(entry?.importance ?: 0), modifier = Modifier.size(26.dp))
++                    }
++                }
++                Spacer(Modifier.width(12.dp))
++                Column(Modifier.weight(1f)) {
++                    Text(m.label.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = PlannerColors.Accent, letterSpacing = 0.8.sp, maxLines = 2)
++                    Text(m.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
++                    Text(
++                        (listOfNotNull(m.date?.withWeek()) + people).joinToString(" · "),
++                        fontSize = 12.sp,
++                        color = MaterialTheme.colorScheme.onSurfaceVariant,
++                        maxLines = 1,
++                    )
++                }
++            }
++        }
++        if (memories.size > 1) {
++            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
++                repeat(memories.size) { i ->
++                    Box(
++                        Modifier
++                            .padding(horizontal = 3.dp)
++                            .size(if (i == pager.currentPage) 8.dp else 6.dp)
++                            .clip(CircleShape)
++                            .background(if (i == pager.currentPage) PlannerColors.Accent else MaterialTheme.colorScheme.outlineVariant),
++                    )
++                }
++            }
++        }
++    }
++}
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/journal/LibraryUi.kt b/feature/planner/src/main/java/com/ivy/planner/ui/journal/LibraryUi.kt
+index ab88549..2571eb3 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/journal/LibraryUi.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/journal/LibraryUi.kt
+@@ -69,7 +69,22 @@ fun LazyListScope.libraryTimeline(
+     hideCollectionId: String? = null,
+ ) {
+     val byDay = entries.groupBy { it.date }
++    // year headings once the timeline reaches beyond the current year
++    val showYears = entries.any { e -> e.date?.let { it.year != java.time.LocalDate.now().year } == true }
++    var lastYear: Int? = null
+     byDay.forEach { (date, dayEntries) ->
++        val year = date?.year
++        if (showYears && year != null && year != lastYear) {
++            lastYear = year
++            item(key = "y:$year") {
++                Text(
++                    "$year",
++                    modifier = Modifier.padding(start = 20.dp, top = 18.dp, bottom = 2.dp),
++                    fontSize = 20.sp,
++                    fontWeight = FontWeight.ExtraBold,
++                )
++            }
++        }
+         item(key = "d:${date ?: "none"}") {
+             Box(Modifier.padding(start = 20.dp, top = 14.dp, bottom = 2.dp)) {
+                 SectionLabel(date?.withWeek() ?: "No date", MaterialTheme.colorScheme.onSurfaceVariant)
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/journal/TimelineScreen.kt b/feature/planner/src/main/java/com/ivy/planner/ui/journal/TimelineScreen.kt
+index dcd35ff..bbd6625 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/journal/TimelineScreen.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/journal/TimelineScreen.kt
+@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
+ @Composable
+ fun PlannerTimelineScreenImpl(screen: PlannerTimelineScreen) {
+     val vm: JournalViewModel = screenScopedViewModel()
+-    PlannerTheme { TimelineUi(vm, screen.personId, screen.collectionId) }
++    PlannerTheme { TimelineUi(vm, screen.personId, screen.collectionId, screen.importance) }
+ }
+ 
+ private enum class TypeFilter(val label: String, val kinds: Set<EntryKind>?) {
+@@ -66,12 +66,14 @@ private enum class TypeFilter(val label: String, val kinds: Set<EntryKind>?) {
+ }
+ 
+ @Composable
+-private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: String?) {
++private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: String?, startImportance: Int?) {
+     val nav = navigation()
+     val scope = rememberCoroutineScope()
+     val lib by remember { vm.library.observe() }.collectAsState(initial = null)
+-    var importance by remember { mutableStateOf(setOf<Int>()) }
++    var importance by remember { mutableStateOf(setOfNotNull(startImportance)) }
+     var type by remember { mutableStateOf(TypeFilter.ALL) }
++    var year by remember { mutableStateOf<Int?>(null) }
++    val allMemories = personId == null && collectionId == null
+     var menu by remember { mutableStateOf(false) }
+     var renaming by remember { mutableStateOf(false) }
+     var deleting by remember { mutableStateOf(false) }
+@@ -79,12 +81,18 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
+     val l = lib
+     val person = personId?.let { l?.person(it) }
+     val collection = collectionId?.let { l?.collection(it) }
+-    val name = person?.name ?: collection?.name ?: ""
++    val name = person?.name ?: collection?.name ?: if (allMemories) "Memories" else ""
+     val all = l?.entries.orEmpty().filter { e ->
+-        (personId != null && personId in l?.peopleOf?.get(e.id).orEmpty()) ||
+-            (collectionId != null && collectionId in l?.collectionsOf?.get(e.id).orEmpty())
++        if (allMemories) {
++            e.kind == EntryKind.JOURNAL || e.kind == EntryKind.NOTE
++        } else {
++            (personId != null && personId in l?.peopleOf?.get(e.id).orEmpty()) ||
++                (collectionId != null && collectionId in l?.collectionsOf?.get(e.id).orEmpty())
++        }
+     }
++    val years = all.mapNotNull { it.date?.year }.distinct().sortedDescending()
+     val shown = all
++        .filter { year == null || it.date?.year == year }
+         .filter { type.kinds == null || it.kind in type.kinds!! }
+         .filter { importance.isEmpty() || it.importance in importance }
+         .newestFirst()
+@@ -109,7 +117,7 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
+                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                         )
+                     }
+-                    Box {
++                    if (!allMemories) Box {
+                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
+                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renaming = true })
+@@ -131,6 +139,17 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
+                     }
+                 }
+             }
++            if (years.size > 1) {
++                item {
++                    Row(
++                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 2.dp),
++                        horizontalArrangement = Arrangement.spacedBy(6.dp),
++                    ) {
++                        Pill("All years", year == null, { year = null })
++                        years.forEach { y -> Pill("$y", year == y, { year = if (year == y) null else y }) }
++                    }
++                }
++            }
+             item {
+                 ImportanceFilter(
+                     selected = importance,
+@@ -141,7 +160,11 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
+             if (l != null && shown.isEmpty()) {
+                 item {
+                     Text(
+-                        if (all.isEmpty()) "Nothing here yet. Tag entries with ${name.ifBlank { "this" }} in the editor." else "No entries match these filters.",
++                        when {
++                            all.isNotEmpty() -> "No entries match these filters."
++                            allMemories -> "No memories yet."
++                            else -> "Nothing here yet. Tag entries with ${name.ifBlank { "this" }} in the editor."
++                        },
+                         modifier = Modifier.padding(20.dp),
+                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                     )
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/week/WeekScreen.kt b/feature/planner/src/main/java/com/ivy/planner/ui/week/WeekScreen.kt
+index 9549e5e..e22202d 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/week/WeekScreen.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/week/WeekScreen.kt
+@@ -74,6 +74,7 @@ import com.ivy.planner.ui.PlannerTheme
+ import com.ivy.planner.ui.RapidLog
+ import com.ivy.planner.ui.SectionLabel
+ import com.ivy.planner.ui.ShortDayFmt
++import com.ivy.planner.ui.shortDay
+ import java.time.format.DateTimeFormatter
+ import java.util.Locale
+ 
+@@ -232,7 +233,7 @@ private fun WeekTaskRow(task: Entry, state: WeekState, onEvent: (WeekEvent) -> U
+             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                 state.week.days.forEach { d ->
+                     DropdownMenuItem(
+-                        text = { Text(d.format(ShortDayFmt)) },
++                        text = { Text(d.shortDay()) },
+                         onClick = {
+                             menu = false
+                             onEvent(WeekEvent.AssignToDay(task.id, d))
+diff --git a/shared/planner/src/main/java/com/ivy/planner/data/PlannerRepository.kt b/shared/planner/src/main/java/com/ivy/planner/data/PlannerRepository.kt
+index 0e6951d..c6febda 100644
+--- a/shared/planner/src/main/java/com/ivy/planner/data/PlannerRepository.kt
++++ b/shared/planner/src/main/java/com/ivy/planner/data/PlannerRepository.kt
+@@ -221,6 +221,8 @@ class PlannerRepository @Inject constructor(
+ 
+     suspend fun getSeries(id: String): Series? = seriesDao.findById(id)?.toDomain()
+ 
++    fun observeSeries(): Flow<List<Series>> = seriesDao.observeAll().map { list -> list.mapNotNull { it.toDomain() } }
++
+     /** Creates or replaces a series as a whole (new series, or pause/resume). */
+     suspend fun saveSeries(series: Series) {
+         val existing = seriesDao.findById(series.id)
+diff --git a/shared/planner/src/main/java/com/ivy/planner/domain/Memories.kt b/shared/planner/src/main/java/com/ivy/planner/domain/Memories.kt
+new file mode 100644
+index 0000000..f037eab
+--- /dev/null
++++ b/shared/planner/src/main/java/com/ivy/planner/domain/Memories.kt
+@@ -0,0 +1,120 @@
++package com.ivy.planner.domain
++
++import java.time.LocalDate
++import java.time.temporal.ChronoUnit
++
++/** Why a memory is being shown today. */
++enum class MemoryKind { ANNIVERSARY, ON_THIS_DAY, COMING_UP, THIS_WEEK, FIRST_WITH, FROM_A_YEAR }
++
++/**
++ * A resurfaced memory for the Journal tab's swipeable card.
++ * [label] says why it's shown ("2 years ago today"); [entryId] is the memory itself.
++ */
++data class Memory(
++    val kind: MemoryKind,
++    val label: String,
++    val entryId: String?,
++    val title: String,
++    val date: LocalDate?,
++    val personId: String? = null,
++)
++
++/**
++ * Picks today's memories, most meaningful first:
++ * anniversaries of important moments, on this day, coming up, this week in past years,
++ * a first memory with someone, and a memory from a past year.
++ */
++object Memories {
++    const val MAX = 5
++
++    private fun years(from: LocalDate, to: LocalDate) = ChronoUnit.YEARS.between(from, to).toInt()
++    private fun ago(n: Int) = if (n == 1) "1 year ago" else "$n years ago"
++    private fun sameDay(a: LocalDate, b: LocalDate) = a.monthValue == b.monthValue && a.dayOfMonth == b.dayOfMonth
++
++    /** The date this year's anniversary of [d] falls on (29 Feb → 28 Feb in other years). */
++    private fun anniversaryIn(year: Int, d: LocalDate): LocalDate =
++        runCatching { d.withYear(year) }.getOrElse { LocalDate.of(year, d.monthValue, 28) }
++
++    fun pick(
++        today: LocalDate,
++        entries: List<Entry>,
++        peopleOf: Map<String, List<String>>,
++        personName: (String) -> String?,
++        yearlyEvents: List<Pair<String, LocalDate>> = emptyList(),
++    ): List<Memory> {
++        // memories are journal entries and events from earlier years
++        val past = entries.filter { e ->
++            (e.kind == EntryKind.JOURNAL || e.kind == EntryKind.EVENT) &&
++                e.date != null && e.date.year < today.year && e.state != EntryState.DROPPED
++        }
++        val out = mutableListOf<Memory>()
++        val used = mutableSetOf<String>()
++        fun add(m: Memory) {
++            if (out.size >= MAX) return
++            if (m.entryId != null && !used.add(m.entryId)) return
++            out += m
++        }
++
++        // 1. anniversaries of important and life-changing moments
++        past.filter { it.importance >= Importance.IMPORTANT && sameDay(anniversaryIn(today.year, it.date!!), today) }
++            .sortedByDescending { it.importance }
++            .forEach { add(Memory(MemoryKind.ANNIVERSARY, "${years(it.date!!, today)} years since", it.id, it.title, it.date)) }
++
++        // 2. on this day in earlier years
++        past.filter { sameDay(anniversaryIn(today.year, it.date!!), today) }
++            .sortedWith(compareByDescending<Entry> { it.importance }.thenBy { it.date })
++            .forEach { add(Memory(MemoryKind.ON_THIS_DAY, "${ago(years(it.date!!, today))} today", it.id, it.title, it.date)) }
++
++        // 3. coming up in the next 7 days: yearly events and anniversaries of important moments
++        val upcoming = mutableListOf<Triple<Int, String, Memory>>()
++        yearlyEvents.forEach { (title, next) ->
++            val days = ChronoUnit.DAYS.between(today, next).toInt()
++            if (days in 1..7) upcoming += Triple(days, title, Memory(MemoryKind.COMING_UP, inDays(days), null, title, next))
++        }
++        past.filter { it.importance >= Importance.IMPORTANT }.forEach { e ->
++            var next = anniversaryIn(today.year, e.date!!)
++            if (next.isBefore(today)) next = anniversaryIn(today.year + 1, e.date)
++            val days = ChronoUnit.DAYS.between(today, next).toInt()
++            if (days in 1..7) {
++                upcoming += Triple(days, e.id, Memory(MemoryKind.COMING_UP, "${inDays(days)}: ${years(e.date, next)} years since", e.id, e.title, e.date))
++            }
++        }
++        upcoming.sortedBy { it.first }.forEach { add(it.third) }
++
++        // 4. this week in earlier years (same ISO week number)
++        val week = today.isoWeek().week
++        past.filter { it.date!!.isoWeek().week == week && !sameDay(anniversaryIn(today.year, it.date), today) }
++            .sortedWith(compareByDescending<Entry> { it.importance }.thenByDescending { it.date })
++            .take(1)
++            .forEach { add(Memory(MemoryKind.THIS_WEEK, "This week in ${it.date!!.year}", it.id, it.title, it.date)) }
++
++        // 5. a first memory with someone, rotating through people day by day
++        val firsts = peopleOf.entries
++            .flatMap { (entryId, people) -> people.map { it to entryId } }
++            .groupBy({ it.first }, { it.second })
++            .mapNotNull { (personId, ids) ->
++                val first = entries.filter { it.id in ids && it.date != null }.minByOrNull { it.date!! }
++                first?.takeIf { it.date!!.year < today.year }?.let { personId to it }
++            }
++            .sortedBy { it.first }
++        if (firsts.isNotEmpty()) {
++            val (personId, e) = firsts[(today.toEpochDay() % firsts.size).toInt()]
++            val name = personName(personId) ?: ""
++            add(Memory(MemoryKind.FIRST_WITH, "Your first memory with $name, ${ago(years(e.date!!, today))}", e.id, e.title, e.date, personId))
++        }
++
++        // 6. a memory from a past year, favouring important ones; the pick changes daily
++        val pool = past.filter { it.importance >= Importance.UNUSUAL }.ifEmpty { past }
++        if (pool.isNotEmpty()) {
++            val e = pool.sortedBy { it.id }[(today.toEpochDay() % pool.size).toInt()]
++            add(Memory(MemoryKind.FROM_A_YEAR, "From ${e.date!!.year}", e.id, e.title, e.date))
++        }
++        return out
++    }
++
++    private fun inDays(days: Int) = when (days) {
++        1 -> "Tomorrow"
++        7 -> "Next week"
++        else -> "In $days days"
++    }
++}
+diff --git a/shared/planner/src/main/java/com/ivy/planner/domain/RapidLogParser.kt b/shared/planner/src/main/java/com/ivy/planner/domain/RapidLogParser.kt
+index 00f57dd..9ec5fa1 100644
+--- a/shared/planner/src/main/java/com/ivy/planner/domain/RapidLogParser.kt
++++ b/shared/planner/src/main/java/com/ivy/planner/domain/RapidLogParser.kt
+@@ -11,7 +11,8 @@ import java.time.temporal.TemporalAdjusters
+  * Works fully offline. Recognised parts are removed from the title.
+  *
+  * Kind: "- " note, "o " event, otherwise a task.
+- * Day: today, tonight, tomorrow, day after tomorrow, (on/next/this) monday…, 28 sep, sep 28, 28/9.
++ * Day: today, tonight, tomorrow, day after tomorrow, (on/next/this) monday…, 28 sep, sep 28, 28/9,
++ * and with a year for past or future dates: 29 oct 2010, oct 29 2010, 29/10/2010.
+  * Time: 7pm, 7:30 pm, 19:30, at 19, at 7 (1–7 means pm), noon, morning, afternoon, evening.
+  * Duration: for 30 min, for 1 hour, for 1.5 hours, for 45m.
+  */
+@@ -135,22 +136,22 @@ object RapidLogParser {
+             date = weekday(today, days[m.groupValues[2].lowercase()] ?: return@take false, m.groupValues[1])
+             true
+         }
+-        // "28 sep", "28th september", "on sep 28"
+-        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+($MONTH_NAMES)\b""", o)) { m ->
++        // "28 sep", "28th september 2010", "on sep 28", "oct 29 2010" (a 4-digit year may follow)
++        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+($MONTH_NAMES)\b(?:,?\s+(\d{4})\b)?""", o)) { m ->
+             val month = monthOf(m.groupValues[2]) ?: return@take false
+-            date = futureDate(today, month, m.groupValues[1].toInt()) ?: return@take false
++            date = dateOf(today, month, m.groupValues[1].toInt(), m.groupValues[3]) ?: return@take false
+             true
+         }
+-        if (date == null) take(Regex("""\s(?:on\s+)?($MONTH_NAMES)\s+(\d{1,2})(?:st|nd|rd|th)?\b""", o)) { m ->
++        if (date == null) take(Regex("""\s(?:on\s+)?($MONTH_NAMES)\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4})\b)?""", o)) { m ->
+             val month = monthOf(m.groupValues[1]) ?: return@take false
+-            date = futureDate(today, month, m.groupValues[2].toInt()) ?: return@take false
++            date = dateOf(today, month, m.groupValues[2].toInt(), m.groupValues[3]) ?: return@take false
+             true
+         }
+-        // "28/9" or "28-09" (day first)
+-        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})[/\-](\d{1,2})\b""")) { m ->
++        // "28/9", "28-09", "29/10/2010" (day first)
++        if (date == null) take(Regex("""\s(?:on\s+)?(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{4}))?\b""")) { m ->
+             val month = m.groupValues[2].toInt()
+             if (month !in 1..12) return@take false
+-            date = futureDate(today, Month.of(month), m.groupValues[1].toInt()) ?: return@take false
++            date = dateOf(today, Month.of(month), m.groupValues[1].toInt(), m.groupValues[3]) ?: return@take false
+             true
+         }
+         // parts of the day, only when no clock time was given
+@@ -177,6 +178,11 @@ object RapidLogParser {
+         if (prefix.lowercase() == "this" && today.dayOfWeek == dow) today
+         else today.with(TemporalAdjusters.next(dow))
+ 
++    /** An exact date when a year was typed, otherwise the next upcoming one. */
++    private fun dateOf(today: LocalDate, month: Month, day: Int, year: String): LocalDate? =
++        if (year.isNotEmpty()) runCatching { LocalDate.of(year.toInt(), month, day) }.getOrNull()
++        else futureDate(today, month, day)
++
+     /** The next occurrence (today or later) of [day] [month]; next year if it has passed. */
+     private fun futureDate(today: LocalDate, month: Month, day: Int): LocalDate? {
+         fun of(year: Int) = runCatching { LocalDate.of(year, month, day) }.getOrNull()
+diff --git a/shared/planner/src/test/java/com/ivy/planner/domain/MemoriesTest.kt b/shared/planner/src/test/java/com/ivy/planner/domain/MemoriesTest.kt
+new file mode 100644
+index 0000000..9cbcaf7
+--- /dev/null
++++ b/shared/planner/src/test/java/com/ivy/planner/domain/MemoriesTest.kt
+@@ -0,0 +1,66 @@
++package com.ivy.planner.domain
++
++import io.kotest.matchers.shouldBe
++import org.junit.Test
++import java.time.LocalDate
++
++class MemoriesTest {
++    private val today = LocalDate.of(2026, 9, 25)
++    private fun j(id: String, title: String, date: LocalDate, importance: Int = 0) =
++        Entry(id, EntryKind.JOURNAL, title, date = date, importance = importance)
++
++    @Test
++    fun `anniversaries of important moments come first`() {
++        val entries = listOf(
++            j("a", "Nyra's first steps", LocalDate.of(2024, 9, 25), importance = 1),
++            j("b", "Founded TEDLinx", LocalDate.of(2012, 9, 25), importance = 4),
++        )
++        val m = Memories.pick(today, entries, emptyMap(), { null })
++        m[0].kind shouldBe MemoryKind.ANNIVERSARY
++        m[0].label shouldBe "14 years since"
++        m[1].kind shouldBe MemoryKind.ON_THIS_DAY
++        m[1].label shouldBe "2 years ago today"
++    }
++
++    @Test
++    fun `this year's entries are not memories yet`() {
++        Memories.pick(today, listOf(j("a", "Today", today)), emptyMap(), { null }) shouldBe emptyList()
++    }
++
++    @Test
++    fun `coming up within a week`() {
++        val entries = listOf(j("w", "Wedding", LocalDate.of(2011, 9, 28), importance = 4))
++        val m = Memories.pick(today, entries, emptyMap(), { null }, yearlyEvents = listOf("Sundari Krishna's birthday" to today.plusDays(1)))
++        // the wedding is already shown as "coming up", so it is not repeated as "From 2011"
++        m.map { it.label } shouldBe listOf("Tomorrow", "In 3 days: 15 years since")
++    }
++
++    @Test
++    fun `this week in past years uses the ISO week`() {
++        // 22 Sep 2019 is in week 38; 23 Sep 2019 is in week 39 like 25 Sep 2026
++        val entries = listOf(j("x", "Office move", LocalDate.of(2019, 9, 23)), j("y", "Other week", LocalDate.of(2019, 9, 22)))
++        Memories.pick(today, entries, emptyMap(), { null }).first().label shouldBe "This week in 2019"
++    }
++
++    @Test
++    fun `first memory with a person`() {
++        val entries = listOf(j("p1", "Met Nyra", LocalDate.of(2023, 3, 1)), j("p2", "Later", LocalDate.of(2024, 3, 1)))
++        val m = Memories.pick(today, entries, mapOf("p1" to listOf("nyra"), "p2" to listOf("nyra")), { "Nyra" })
++        m.first { it.kind == MemoryKind.FIRST_WITH }.label shouldBe "Your first memory with Nyra, 3 years ago"
++        m.first { it.kind == MemoryKind.FIRST_WITH }.entryId shouldBe "p1"
++    }
++
++    @Test
++    fun `no duplicates and at most five`() {
++        val entries = (1..10).map { j("e$it", "Memory $it", LocalDate.of(2010 + it, 9, 25), importance = 3) }
++        val m = Memories.pick(today, entries, emptyMap(), { null })
++        m.size shouldBe 5
++        m.map { it.entryId }.toSet().size shouldBe 5
++    }
++
++    @Test
++    fun `29 February is remembered on 28 February`() {
++        val e = j("leap", "Leap day", LocalDate.of(2024, 2, 29), importance = 3)
++        Memories.pick(LocalDate.of(2027, 2, 28), listOf(e), emptyMap(), { null }).first().kind shouldBe MemoryKind.ANNIVERSARY
++    }
++}
+diff --git a/shared/planner/src/test/java/com/ivy/planner/domain/RapidLogParserTest.kt b/shared/planner/src/test/java/com/ivy/planner/domain/RapidLogParserTest.kt
+index 6d32610..068160d 100644
+--- a/shared/planner/src/test/java/com/ivy/planner/domain/RapidLogParserTest.kt
++++ b/shared/planner/src/test/java/com/ivy/planner/domain/RapidLogParserTest.kt
+@@ -108,4 +108,15 @@ class RapidLogParserTest {
+         TagMatch.find("CAR", cs)?.id shouldBe "2"
+         TagMatch.find("house", cs) shouldBe null
+     }
++
++    @Test
++    fun `dates with a year, including the past`() {
++        p("moved to Bengaluru on 29 oct 2010").let {
++            it.date shouldBe LocalDate.of(2010, 10, 29)
++            it.title shouldBe "moved to Bengaluru"
++        }
++        p("wedding oct 29 2010").date shouldBe LocalDate.of(2010, 10, 29)
++        p("bought the car 25/10/2019").date shouldBe LocalDate.of(2019, 10, 25)
++        p("renew licence 1/1/2030").date shouldBe LocalDate.of(2030, 1, 1)
++    }
+ }
+diff --git a/shared/ui/navigation/src/main/java/com/ivy/navigation/Screens.kt b/shared/ui/navigation/src/main/java/com/ivy/navigation/Screens.kt
+index d6989f2..5f48a13 100644
+--- a/shared/ui/navigation/src/main/java/com/ivy/navigation/Screens.kt
++++ b/shared/ui/navigation/src/main/java/com/ivy/navigation/Screens.kt
+@@ -169,5 +169,12 @@ data object PlannerSearchScreen : Screen
+ /** Boards (Taskito-style task collections). [boardId] null = the first board. */
+ data class PlannerBoardsScreen(val boardId: String? = null) : Screen
+ 
+-/** The timeline of one person or one collection (Car, House, Suchet · School…). */
+-data class PlannerTimelineScreen(val personId: String? = null, val collectionId: String? = null) : Screen
++/**
++ * The timeline of one person or one collection (Car, House, TEDLinx…), or with neither,
++ * all journal memories. [importance] pre-selects an importance level.
++ */
++data class PlannerTimelineScreen(
++    val personId: String? = null,
++    val collectionId: String? = null,
++    val importance: Int? = null,
++) : Screen

@@ -63,8 +63,10 @@ data class DayRow(
     val durationMinutes: Int? = null,
     /** Expense or income from the money side (read-only here). */
     val money: MoneyItem? = null,
-    /** Shown in the time column: "10:30", "All day". */
+    /** Shown in the time column: "10:30". */
     val timeLabel: String = "",
+    /** At the right end of the title line: "15 min", "All day". */
+    val trailing: String = "",
     val importance: Int = 0,
     val tags: List<RowTag> = emptyList(),
     val photos: List<File> = emptyList(),
@@ -191,10 +193,14 @@ class DayViewModel @Inject constructor(
             title = entry.title,
             description = entry.description,
             meta = listOfNotNull(
-                if (entry.kind == EntryKind.TASK && entry.time != null) duration(entry.durationMinutes) else null,
                 if (entry.migrationCount > 0) "migrated ${entry.migrationCount}×" else null,
             ).joinToString(" · "),
-            timeLabel = entry.time?.label() ?: if (entry.kind == EntryKind.EVENT) "All day" else "",
+            timeLabel = entry.time?.label() ?: "",
+            trailing = when {
+                entry.kind == EntryKind.TASK && entry.time != null -> duration(entry.durationMinutes)
+                entry.kind == EntryKind.EVENT && entry.time == null -> "All day"
+                else -> ""
+            },
             importance = entry.importance,
             state = entry.state,
             repeating = false,
@@ -211,9 +217,13 @@ class DayViewModel @Inject constructor(
                 kind = series.kind,
                 title = title,
                 description = description,
-                timeLabel = sortTime?.label() ?: if (series.kind == EntryKind.EVENT) "All day" else "",
+                timeLabel = sortTime?.label() ?: "",
+                trailing = when {
+                    series.kind == EntryKind.TASK && sortTime != null -> duration(series.durationMinutes)
+                    series.kind == EntryKind.EVENT && sortTime == null -> "All day"
+                    else -> ""
+                },
                 meta = listOfNotNull(
-                    if (series.kind == EntryKind.TASK && sortTime != null) duration(series.durationMinutes) else null,
                     repository.describe(series).replaceFirstChar { it.lowercase() },
                     dueSince?.let { "due since ${it.withWeek()}" },
                     if (state == EntryState.MISSED) "missed" else null,
@@ -235,7 +245,7 @@ class DayViewModel @Inject constructor(
         kind = EntryKind.NOTE,
         title = title,
         description = "",
-        meta = account,
+        meta = "",
         timeLabel = time.label(),
         state = EntryState.OPEN,
         repeating = false,

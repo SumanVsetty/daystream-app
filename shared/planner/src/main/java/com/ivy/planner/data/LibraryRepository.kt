@@ -7,7 +7,6 @@ import com.ivy.planner.domain.CollectionType
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.Person
 import com.ivy.planner.domain.TagMatch
-import com.ivy.planner.domain.TextCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -72,7 +71,7 @@ class LibraryRepository @Inject constructor(
         db.collectionDao().upsert(
             CollectionEntity(
                 id = cid,
-                name = TextCase.sentence(name.trim()),
+                name = name.trim(),
                 color = (color ?: existing?.color?.toLong()?.and(0xFFFFFFFFL) ?: CollectionColors.next(all.size)).toInt(),
                 type = type.name,
                 coverUri = existing?.coverUri,
@@ -112,7 +111,7 @@ class LibraryRepository @Inject constructor(
 
     suspend fun savePerson(name: String, id: String? = null): String {
         val pid = id ?: newId()
-        db.peopleDao().upsert(PersonEntity(pid, TextCase.sentence(name.trim())))
+        db.peopleDao().upsert(PersonEntity(pid, name.trim()))
         return pid
     }
 

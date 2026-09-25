@@ -163,13 +163,12 @@ object RapidLogParser {
             true
         }
 
-        val title = TextCase.sentence(
-            text.trim()
-                .replace(Regex("""\s{2,}"""), " ")
-                .trimEnd(',', ';', '-', '–')
-                .replace(Regex("""\s+(at|on|by|for)$""", o), "")
-                .trim(),
-        )
+        // capitalisation is left to the keyboard, so the title keeps exactly what was typed
+        val title = text.trim()
+            .replace(Regex("""\s{2,}"""), " ")
+            .trimEnd(',', ';', '-', '–')
+            .replace(Regex("""\s+(at|on|by|for)$""", o), "")
+            .trim()
         return Result(kind, title, date, time, duration, tags)
     }
 

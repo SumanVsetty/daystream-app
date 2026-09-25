@@ -12,14 +12,14 @@ class RapidLogParserTest {
     @Test
     fun `the example from the design discussion`() {
         val r = p("call Mr.Sunil regd L&T project today at 7pm")
-        r.title shouldBe "Call Mr.Sunil regd L&T project"
+        r.title shouldBe "call Mr.Sunil regd L&T project"
         r.date shouldBe today
         r.time shouldBe LocalTime.of(19, 0)
         r.kind shouldBe EntryKind.TASK
     }
 
     @Test
-    fun `plain text is just a task title`() {
+    fun `plain text is just a task title, kept exactly as typed`() {
         val r = p("Centum quote")
         r.title shouldBe "Centum quote"
         r.understoodSomething shouldBe false
@@ -68,7 +68,7 @@ class RapidLogParserTest {
             it.durationMinutes shouldBe 90
             it.time shouldBe LocalTime.of(10, 0)
             it.date shouldBe today.plusDays(1)
-            it.title shouldBe "Deep work"
+            it.title shouldBe "deep work"
         }
     }
 
@@ -76,7 +76,7 @@ class RapidLogParserTest {
     fun `ordinary words aren't mistaken for dates`() {
         p("sat with Sunil about invoices").date shouldBe null
         p("sunil follow up").date shouldBe null
-        p("check 2 invoices").let { it.date shouldBe null; it.time shouldBe null; it.title shouldBe "Check 2 invoices" }
+        p("check 2 invoices").let { it.date shouldBe null; it.time shouldBe null; it.title shouldBe "check 2 invoices" }
     }
 
     @Test

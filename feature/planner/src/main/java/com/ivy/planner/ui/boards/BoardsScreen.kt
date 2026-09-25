@@ -279,6 +279,7 @@ private fun BoardRow(
             onToggle = { scope.launch { toggleEntry(vm.planner, e) } },
             onClick = { openEntry(nav, e) },
             timeLabel = e.time?.label() ?: "",
+            trailing = if (e.time != null) "${e.durationMinutes ?: 15} min" else "",
             lineAbove = if (index > 0) colors[index - 1] else null,
             lineBelow = if (index < colors.lastIndex) colors[index] else null,
         )

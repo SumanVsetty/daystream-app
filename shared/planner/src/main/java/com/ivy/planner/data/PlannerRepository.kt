@@ -9,7 +9,6 @@ import com.ivy.planner.domain.IsoWeek
 import com.ivy.planner.domain.OccurrenceRecord
 import com.ivy.planner.domain.Planner
 import com.ivy.planner.domain.RapidLogParser
-import com.ivy.planner.domain.TextCase
 import com.ivy.planner.domain.RepeatCodec
 import com.ivy.planner.domain.RepeatEnd
 import com.ivy.planner.domain.Series
@@ -81,8 +80,8 @@ class PlannerRepository @Inject constructor(
         val entry = Entry(
             id = id,
             kind = kind,
-            title = TextCase.sentence(title.trim()),
-            description = TextCase.sentenceLines(description),
+            title = title.trim(),
+            description = description,
             date = date,
             time = time ?: defaultTime(kind, date, durationMinutes, excludeId = id),
             week = week,
@@ -158,8 +157,7 @@ class PlannerRepository @Inject constructor(
             entry.copy(
                 week = week,
                 time = time,
-                title = TextCase.sentence(entry.title.trim()),
-                description = TextCase.sentenceLines(entry.description),
+                title = entry.title.trim(),
             ).toEntity(createdAt = existing?.createdAt ?: now(), now = now()),
         )
     }
@@ -234,8 +232,7 @@ class PlannerRepository @Inject constructor(
         seriesDao.upsert(
             series.copy(
                 time = time,
-                title = TextCase.sentence(series.title.trim()),
-                description = TextCase.sentenceLines(series.description),
+                title = series.title.trim(),
             ).toEntity(createdAt = existing?.createdAt ?: now(), now = now()),
         )
     }

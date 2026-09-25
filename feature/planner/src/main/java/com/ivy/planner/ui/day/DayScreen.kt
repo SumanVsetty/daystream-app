@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -113,7 +114,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
 
     // items above the timeline, to translate a row index into a list position
     val showBanner = state.date == state.today && state.today.dayOfWeek == java.time.DayOfWeek.MONDAY
-    val leadingItems = 2 + (if (showBanner) 1 else 0) + (if (state.overdue.isNotEmpty()) 1 else 0) +
+    val leadingItems = (if (showBanner) 1 else 0) + (if (state.overdue.isNotEmpty()) 1 else 0) +
         (if (state.rows.isEmpty()) 1 else 0)
     // today opens scrolled to one hour before now; other days open at the top
     var scrolledFor by remember { mutableStateOf<LocalDate?>(null) }
@@ -140,44 +141,44 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
             }
         },
     ) { padding ->
+      // fixed: date row, week strip and rapid log; only the timeline below scrolls
+      Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
+        HeaderRow(
+            state = state,
+            showBack = !asTab,
+            onBack = { nav.back() },
+            onToday = { onEvent(DayEvent.SelectDate(state.today)) },
+            onSearch = { nav.navigateTo(PlannerSearchScreen) },
+            onMonth = { monthOpen = true },
+            onToggleFilter = { onEvent(DayEvent.ToggleFilter) },
+        )
+        WeekStrip(
+            selected = state.date,
+            today = state.today,
+            dotFor = { state.dots[it] },
+            onSelect = { onEvent(DayEvent.SelectDate(it)) },
+            onPrevWeek = { onEvent(DayEvent.SelectDate(state.date.minusWeeks(1))) },
+            onNextWeek = { onEvent(DayEvent.SelectDate(state.date.plusWeeks(1))) },
+        )
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp)) {
+            RapidLog(placeholder = "Rapid log…", today = state.today, onSubmit = { onEvent(DayEvent.RapidLog(it)) })
+        }
+        // a thin divider appears once the timeline has scrolled under the fixed part
+        if (listState.canScrollBackward) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(
-                top = padding.calculateTopPadding(),
+                top = 4.dp,
                 // leave room for the app's bottom bar in tab mode, or the FAB otherwise
                 bottom = padding.calculateBottomPadding() + if (asTab) 110.dp else 88.dp,
             ),
         ) {
-            item {
-                HeaderRow(
-                    state = state,
-                    showBack = !asTab,
-                    onBack = { nav.back() },
-                    onToday = { onEvent(DayEvent.SelectDate(state.today)) },
-                    onSearch = { nav.navigateTo(PlannerSearchScreen) },
-                    onMonth = { monthOpen = true },
-                    onToggleFilter = { onEvent(DayEvent.ToggleFilter) },
-                )
-                WeekStrip(
-                    selected = state.date,
-                    today = state.today,
-                    dotFor = { state.dots[it] },
-                    onSelect = { onEvent(DayEvent.SelectDate(it)) },
-                    onPrevWeek = { onEvent(DayEvent.SelectDate(state.date.minusWeeks(1))) },
-                    onNextWeek = { onEvent(DayEvent.SelectDate(state.date.plusWeeks(1))) },
-                )
-            }
             if (showBanner) {
                 item { SlimBanner("New week: review last week", "Review") { nav.navigateTo(PlannerReviewScreen) } }
             }
             if (state.overdue.isNotEmpty()) {
                 item { OverdueSection(state.overdue, state.today, onEvent) }
-            }
-            item {
-                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)) {
-                    RapidLog(placeholder = "Rapid log…", today = state.today, onSubmit = { onEvent(DayEvent.RapidLog(it)) })
-                }
             }
             if (state.rows.isEmpty()) {
                 item {
@@ -206,6 +207,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                         importance = row.importance,
                         tags = row.tags,
                         photos = row.photos,
+                        trailing = row.trailing,
                         onClick = {
                             val m = row.money
                             if (m != null) {
@@ -230,6 +232,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
             }
 
         }
+      }
     }
 
     if (monthOpen) {

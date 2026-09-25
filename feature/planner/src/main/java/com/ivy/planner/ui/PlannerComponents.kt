@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CurrencyRupee
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Star
@@ -48,8 +49,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -180,6 +185,8 @@ fun EntryRow(
     importance: Int = 0,
     tags: List<RowTag> = emptyList(),
     photos: List<File> = emptyList(),
+    /** Small muted text at the right end of the title line, e.g. "15 min" or "All day". */
+    trailing: String = "",
 ) {
     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -191,16 +198,17 @@ fun EntryRow(
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.Top,
     ) {
-        // time column
+        // time column: one line, always; sized to fit "00:00" at the phone's text size
         Text(
             text = timeLabel,
-            modifier = Modifier.width(36.dp).padding(top = 8.dp),
-            fontSize = if (timeLabel.length > 5) 10.sp else 11.sp,
-            lineHeight = 12.sp,
-            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(timeColumnWidth()).padding(top = 5.dp),
+            style = TimeStyle,
             color = muted,
             textAlign = TextAlign.End,
+            maxLines = 1,
+            softWrap = false,
         )
+        Spacer(Modifier.width(6.dp))
         // icon on the line
         Box(
             modifier = Modifier
@@ -218,14 +226,33 @@ fun EntryRow(
             if (moneyLabel != null) MoneyBadge(moneyIsIncome) else EntryLeading(kind, state, onToggle, importance)
         }
         Column(Modifier.weight(1f).padding(start = 6.dp, top = 4.dp, end = 6.dp, bottom = 8.dp)) {
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                lineHeight = 21.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (faded || kind == EntryKind.NOTE) muted else onSurface,
-                textDecoration = if (state == EntryState.DONE) TextDecoration.LineThrough else null,
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 16.sp,
+                    lineHeight = 21.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (faded || kind == EntryKind.NOTE) muted else onSurface,
+                    textDecoration = if (state == EntryState.DONE) TextDecoration.LineThrough else null,
+                )
+                val right = moneyLabel ?: trailing
+                if (right.isNotBlank()) {
+                    Text(
+                        right,
+                        modifier = Modifier.padding(start = 10.dp, top = 2.dp),
+                        fontSize = if (moneyLabel != null) 14.sp else 12.sp,
+                        fontWeight = if (moneyLabel != null) FontWeight.Bold else FontWeight.Normal,
+                        color = when {
+                            moneyLabel == null -> muted
+                            moneyIsIncome -> PlannerColors.Done
+                            else -> PlannerColors.Accent
+                        },
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
             if (description.isNotBlank()) {
                 Text(
                     text = description,
@@ -267,15 +294,18 @@ fun EntryRow(
                 }
             }
         }
-        if (moneyLabel != null) {
-            Text(
-                moneyLabel,
-                modifier = Modifier.padding(top = 5.dp, end = 10.dp),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (moneyIsIncome) PlannerColors.Done else PlannerColors.Accent,
-            )
-        }
+    }
+}
+
+private val TimeStyle = ComposeTextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, lineHeight = 14.sp)
+
+/** Width of the time column: "00:00" at the current text size, so times never wrap. */
+@Composable
+fun timeColumnWidth(): Dp {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(density.fontScale, density.density) {
+        with(density) { measurer.measure("00:00", TimeStyle).size.width.toDp() } + 2.dp
     }
 }
 
@@ -290,7 +320,12 @@ fun MoneyBadge(isIncome: Boolean) {
                 .background(if (isIncome) PlannerColors.Done else PlannerColors.Accent),
             contentAlignment = Alignment.Center,
         ) {
-            Text("₹", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = if (isIncome) PlannerColors.OnDone else PlannerColors.OnAccent)
+            Icon(
+                Icons.Filled.CurrencyRupee,
+                contentDescription = if (isIncome) "Income" else "Expense",
+                tint = if (isIncome) PlannerColors.OnDone else PlannerColors.OnAccent,
+                modifier = Modifier.size(13.dp),
+            )
         }
     }
 }
@@ -472,7 +507,7 @@ fun RapidLog(
             placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }),
             trailingIcon = {
                 if (text.isNotBlank()) {

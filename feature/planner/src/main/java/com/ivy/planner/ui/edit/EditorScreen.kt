@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -158,6 +160,7 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 onValueChange = { onEvent(EditorEvent.SetTitle(it)) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Title") },
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 shape = RoundedCornerShape(14.dp),
             )
@@ -166,6 +169,7 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 onValueChange = { onEvent(EditorEvent.SetDescription(it)) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Description (optional)") },
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 minLines = 3,
                 shape = RoundedCornerShape(14.dp),
             )

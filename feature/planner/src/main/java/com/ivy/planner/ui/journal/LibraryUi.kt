@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ivy.planner.data.Library
@@ -88,7 +90,12 @@ fun LazyListScope.libraryTimeline(
                     repeating = false,
                     onToggle = { onToggle(e) },
                     onClick = { onOpen(e) },
-                    timeLabel = e.time?.label() ?: if (e.kind == EntryKind.EVENT) "All day" else "",
+                    timeLabel = e.time?.label() ?: "",
+                    trailing = when {
+                        e.kind == EntryKind.TASK && e.time != null -> "${e.durationMinutes ?: 15} min"
+                        e.kind == EntryKind.EVENT && e.time == null -> "All day"
+                        else -> ""
+                    },
                     lineAbove = if (index > 0) colors[index - 1] else null,
                     lineBelow = if (index < ordered.lastIndex) colors[index] else null,
                     importance = e.importance,
@@ -172,7 +179,13 @@ fun NameDialog(title: String, initial: String = "", confirm: String = "Add", onD
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, shape = RoundedCornerShape(12.dp))
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+            )
         },
         confirmButton = {
             TextButton(onClick = { onDone(name.trim()) }, enabled = name.isNotBlank()) {
