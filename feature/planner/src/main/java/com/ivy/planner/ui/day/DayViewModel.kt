@@ -22,6 +22,7 @@ import com.ivy.planner.domain.DayItem
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
+import com.ivy.planner.domain.FreeTime
 import com.ivy.planner.domain.Planner
 import com.ivy.planner.domain.isoWeek
 import com.ivy.planner.ui.MoneyItem
@@ -87,6 +88,34 @@ data class DayState(
     val todoOnly: Boolean,
     /** Index in [rows] to scroll to when opening today (one hour before now). */
     val scrollIndex: Int?,
+    /** The "Now & next" layout (true) or the classic timeline (false). */
+    val focusLayout: Boolean = true,
+    val focus: FocusDay = FocusDay(),
+)
+
+/** A line in "Later today": an entry, or a free stretch of time. */
+@Immutable
+sealed interface LaterItem {
+    data class Row(val row: DayRow) : LaterItem
+    data class Free(val label: String) : LaterItem
+}
+
+/** The day split for the "Now & next" layout. */
+@Immutable
+data class FocusDay(
+    /** Open tasks from earlier today (and earlier days), latest problems first. */
+    val stillOpen: List<DayRow> = emptyList(),
+    val nextUp: DayRow? = null,
+    val nextUpCountdown: String = "",
+    val later: List<LaterItem> = emptyList(),
+    val earlier: List<DayRow> = emptyList(),
+    /** "3 done · 2 expenses · 1 note · 1 memory" */
+    val earlierSummary: String = "",
+    val done: Int = 0,
+    val total: Int = 0,
+    val spent: String? = null,
+    /** Past days show everything as one list; future days as planned. */
+    val isToday: Boolean = true,
 )
 
 sealed interface DayEvent {
@@ -97,6 +126,11 @@ sealed interface DayEvent {
     data class OverdueMove(val id: String, val date: LocalDate) : DayEvent
     data class OverdueDrop(val id: String) : DayEvent
     data object ToggleFilter : DayEvent
+    data object ToggleLayout : DayEvent
+    /** Move to the next free slot today. */
+    data class Later(val row: DayRow) : DayEvent
+    /** Same time tomorrow (repeating tasks: skip today). */
+    data class Tomorrow(val row: DayRow) : DayEvent
     /** Reload expenses (e.g. after returning from the money screens). */
     data object Refresh : DayEvent
 }
@@ -112,6 +146,7 @@ class DayViewModel @Inject constructor(
 
     private var selected by mutableStateOf(PlannerSelection.date)
     private var todoOnly by mutableStateOf(prefs.todoOnly)
+    private var focusLayout by mutableStateOf(prefs.focusLayout)
     private var refresh by mutableIntStateOf(0)
 
     @Composable
@@ -155,7 +190,83 @@ class DayViewModel @Inject constructor(
                 .toMap().toImmutableMap(),
             todoOnly = todoOnly,
             scrollIndex = scrollIndex,
+            focusLayout = focusLayout,
+            focus = focusDay(allRows, s.overdue, date, today, now, money.filter { it.date == date }),
         )
+    }
+
+    private fun DayRow.isOpenTaskLike() = money == null && kind == EntryKind.TASK && state == EntryState.OPEN
+
+    /** Splits the day into still open, next up, later (with free time) and earlier. */
+    private fun focusDay(
+        rows: List<DayRow>,
+        overdue: List<Entry>,
+        date: LocalDate,
+        today: LocalDate,
+        now: LocalTime,
+        money: List<MoneyItem>,
+    ): FocusDay {
+        val tasks = rows.filter { it.money == null && it.kind == EntryKind.TASK && it.state != EntryState.SKIPPED }
+        val spentByCurrency = money.filter { !it.isIncome }.groupBy { it.currency }
+        val spent = spentByCurrency.map { (c, l) -> com.ivy.planner.ui.formatMoney(l.sumOf { it.amount }, c) }
+            .takeIf { it.isNotEmpty() }?.joinToString(" + ")
+        val done = tasks.count { it.state == EntryState.DONE }
+        if (date != today) {
+            // past days: the whole day as one list; future days: everything is planned
+            val later = if (date.isAfter(today)) withFreeTime(rows, LocalTime.of(8, 0)) else rows.map { LaterItem.Row(it) }
+            return FocusDay(later = later, done = done, total = tasks.size, spent = spent, isToday = false)
+        }
+        val stillOpen = rows.filter { it.isOpenTaskLike() && it.time != null && it.time < now } +
+            overdue.map { e ->
+                DayRow(
+                    key = "o:${e.id}", kind = e.kind, title = e.title, description = e.description,
+                    meta = if (e.migrationCount > 0) "moved ${e.migrationCount}×" else "",
+                    state = e.state, repeating = false, entryId = e.id, seriesId = null,
+                    date = e.date ?: date, time = e.time,
+                    timeLabel = e.date?.let { "from " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) } ?: "",
+                )
+            }
+        val upcoming = rows.filter { it.isOpenTaskLike() && it.time != null && it.time >= now }
+        val nextUp = upcoming.firstOrNull()
+        val laterRows = rows.filter { r ->
+            r.key != nextUp?.key && r !in stillOpen && r.state != EntryState.DONE &&
+                (r.time == null && r.kind == EntryKind.EVENT || (r.time != null && r.time >= now))
+        }
+        val from = nextUp?.let { n -> n.time!!.plusMinutes((n.durationMinutes ?: 15).toLong()) } ?: now
+        val earlier = rows.filter { r -> r.key != nextUp?.key && r !in stillOpen && r !in laterRows }
+        val summary = listOfNotNull(
+            earlier.count { it.money == null && it.kind == EntryKind.TASK && it.state == EntryState.DONE }.takeIf { it > 0 }?.let { "$it done" },
+            earlier.count { it.money?.isIncome == false }.takeIf { it > 0 }?.let { if (it == 1) "1 expense" else "$it expenses" },
+            earlier.count { it.money == null && it.kind == EntryKind.EVENT }.takeIf { it > 0 }?.let { if (it == 1) "1 event" else "$it events" },
+            earlier.count { it.money == null && it.kind == EntryKind.NOTE }.takeIf { it > 0 }?.let { if (it == 1) "1 note" else "$it notes" },
+            earlier.count { it.money == null && it.kind == EntryKind.JOURNAL }.takeIf { it > 0 }?.let { if (it == 1) "1 memory" else "$it memories" },
+        ).joinToString(" · ")
+        return FocusDay(
+            stillOpen = stillOpen,
+            nextUp = nextUp,
+            nextUpCountdown = nextUp?.time?.let { FreeTime.countdown(now, it) } ?: "",
+            later = withFreeTime(laterRows, from),
+            earlier = earlier,
+            earlierSummary = summary,
+            done = done,
+            total = tasks.size,
+            spent = spent,
+            isToday = true,
+        )
+    }
+
+    /** Rows with "Free 20:45 – 21:30" lines where there's half an hour or more. */
+    private fun withFreeTime(rows: List<DayRow>, from: LocalTime): List<LaterItem> {
+        val busy = rows.filter { it.money == null && it.time != null && (it.kind == EntryKind.TASK || it.kind == EntryKind.EVENT) }
+            .map { it.time!! to (it.durationMinutes ?: if (it.kind == EntryKind.EVENT) 60 else 15) }
+        val gaps = FreeTime.gaps(from, busy)
+        val items = rows.map { LaterItem.Row(it) as LaterItem }.toMutableList()
+        gaps.forEach { g ->
+            val label = "Free ${g.start.label()} – ${g.end?.label() ?: "midnight"}"
+            val at = items.indexOfFirst { it is LaterItem.Row && it.row.time != null && !it.row.time.isBefore(g.end ?: LocalTime.MAX) }
+            if (at >= 0) items.add(at, LaterItem.Free(label)) else items += LaterItem.Free(label)
+        }
+        return items
     }
 
     private fun DayRow.isOpenTask() =
@@ -320,6 +431,28 @@ class DayViewModel @Inject constructor(
                 prefs.todoOnly = todoOnly
             }
             DayEvent.Refresh -> refresh++
+            DayEvent.ToggleLayout -> {
+                focusLayout = !focusLayout
+                prefs.focusLayout = focusLayout
+            }
+            is DayEvent.Later -> viewModelScope.launch {
+                val row = event.row
+                val today = LocalDate.now()
+                if (row.entryId != null) {
+                    repository.move(row.entryId, today, today = today)
+                } else if (row.seriesId != null) {
+                    val slot = repository.autoTime(today, row.durationMinutes ?: 15, excludeId = row.seriesId)
+                    repository.editOccurrence(row.seriesId, row.date, null, null, slot)
+                }
+            }
+            is DayEvent.Tomorrow -> viewModelScope.launch {
+                val row = event.row
+                if (row.entryId != null) {
+                    repository.reschedule(row.entryId, LocalDate.now().plusDays(1), row.time ?: LocalTime.of(9, 0))
+                } else if (row.seriesId != null) {
+                    repository.setOccurrenceState(row.seriesId, row.date, EntryState.SKIPPED)
+                }
+            }
         }
     }
 }

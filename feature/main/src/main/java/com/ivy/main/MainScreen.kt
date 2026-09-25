@@ -25,6 +25,8 @@ import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.PlannerRoutineEditScreen
 import com.ivy.navigation.navigation
 import com.ivy.planner.ui.PlannerSelection
+import com.ivy.planner.ui.add.PlannerAddSheet
+import com.ivy.planner.ui.add.PlannerAddSheetHost
 import com.ivy.planner.ui.day.PlannerDayTab
 import com.ivy.planner.ui.journal.PlannerJournalTab
 import com.ivy.planner.ui.week.PlannerWeekTab
@@ -118,7 +120,9 @@ private fun BoxWithConstraintsScope.UI(
             if (kind == "ROUTINE") {
                 nav.navigateTo(PlannerRoutineEditScreen(epochDay = PlannerSelection.date.toEpochDay()))
             } else {
-                nav.navigateTo(PlannerEditScreen(epochDay = PlannerSelection.date.toEpochDay(), kind = kind))
+                // tasks, events, notes and journal entries open the quick add sheet
+                val date = if (kind == "JOURNAL" && tab == MainTab.JOURNAL) java.time.LocalDate.now() else PlannerSelection.date
+                PlannerAddSheet.open(kind, date)
             }
         },
         showAddAccountModal = {
@@ -129,6 +133,9 @@ private fun BoxWithConstraintsScope.UI(
             )
         }
     )
+
+    // the planner's quick add sheet, opened from the add menu or the Day tab's log bar
+    PlannerAddSheetHost()
 
     AccountModal(
         modal = accountModalData,

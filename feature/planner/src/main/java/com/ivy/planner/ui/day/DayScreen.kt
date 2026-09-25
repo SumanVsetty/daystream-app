@@ -84,6 +84,7 @@ import com.ivy.planner.ui.RapidLog
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.ShortDayFmt
 import com.ivy.planner.ui.WeekStrip
+import com.ivy.planner.ui.add.PlannerAddSheetHost
 import com.ivy.planner.ui.timelineColor
 import com.ivy.planner.ui.withWeek
 import java.time.LocalDate
@@ -94,14 +95,53 @@ fun PlannerDayScreenImpl(screen: PlannerDayScreen) {
     LaunchedEffect(screen) {
         screen.epochDay?.let { viewModel.onEvent(DayEvent.SelectDate(LocalDate.ofEpochDay(it))) }
     }
-    PlannerTheme { DayUi(state = viewModel.uiState(), onEvent = viewModel::onEvent, asTab = false) }
+    PlannerTheme {
+        DayChooser(viewModel.uiState(), viewModel::onEvent, asTab = false)
+        PlannerAddSheetHost()
+    }
 }
 
 /** The Day log as the app's main "Day" tab (no back button; the bottom bar's logo button adds entries). */
 @Composable
 fun PlannerDayTab() {
     val viewModel: DayViewModel = screenScopedViewModel()
-    PlannerTheme { DayUi(state = viewModel.uiState(), onEvent = viewModel::onEvent, asTab = true) }
+    PlannerTheme { DayChooser(viewModel.uiState(), viewModel::onEvent, asTab = true) }
+}
+
+/** "Now & next" by default; the classic timeline is kept and can be switched back to. */
+@Composable
+private fun DayChooser(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) {
+    if (state.focusLayout) {
+        // refresh expenses when coming back, as the classic layout does
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) onEvent(DayEvent.Refresh) }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        FocusDayUi(state, onEvent, asTab) {
+            NotificationBanner()
+            if (state.date == state.today && state.today.dayOfWeek == java.time.DayOfWeek.MONDAY) {
+                val nav = navigation()
+                SlimBanner("New week: review last week", "Review") { nav.navigateTo(PlannerReviewScreen) }
+            }
+        }
+    } else {
+        DayUi(state = state, onEvent = onEvent, asTab = asTab)
+    }
+}
+
+/** Asks for notification permission on Android 13+, until it's allowed. */
+@Composable
+private fun NotificationBanner() {
+    val context = LocalContext.current
+    fun allowed() = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    var ok by remember { mutableStateOf(allowed()) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok = it }
+    if (!ok && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        SlimBanner("Allow notifications for reminders", "Allow") { ask.launch(Manifest.permission.POST_NOTIFICATIONS) }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -283,6 +323,10 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                     nav.navigateTo(PlannerWeekScreen(w.year, w.week))
                 },
             )
+            LayoutSwitch(state.focusLayout) {
+                onEvent(DayEvent.ToggleLayout)
+                monthOpen = false
+            }
             Spacer(Modifier.height(24.dp))
         }
     }

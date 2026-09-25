@@ -20,6 +20,13 @@ class PlannerPrefs @Inject constructor(
             prefs.edit().putBoolean(KEY_TODO_ONLY, value).apply()
         }
 
+    /** Day tab layout: "Now & next" (true, default) or the classic timeline (false). */
+    var focusLayout: Boolean
+        get() = prefs.getBoolean(KEY_FOCUS_LAYOUT, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_FOCUS_LAYOUT, value).apply()
+        }
+
     /** Snoozed reminders: reminder key → when to remind again. Past snoozes are dropped. */
     var snoozes: Map<String, LocalDateTime>
         get() = prefs.getStringSet(KEY_SNOOZES, emptySet()).orEmpty().mapNotNull { s ->
@@ -55,6 +62,7 @@ class PlannerPrefs @Inject constructor(
 
     private companion object {
         const val KEY_TODO_ONLY = "day_filter_todo_only"
+        const val KEY_FOCUS_LAYOUT = "day_layout_focus"
         const val KEY_SNOOZES = "reminder_snoozes"
         const val KEY_CODES = "reminder_alarm_codes"
         const val KEY_DEFAULT_REMINDER = "default_reminder_minutes"
