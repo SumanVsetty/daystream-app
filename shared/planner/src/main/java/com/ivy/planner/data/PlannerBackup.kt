@@ -9,6 +9,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import java.util.Base64
 import javax.inject.Inject
 
 /** Everything in the planner database, as stored in the backup file. */
@@ -29,6 +30,8 @@ data class PlannerBackupData(
     @SerialName("trackers") val trackers: List<TrackerEntity> = emptyList(),
     @SerialName("readings") val readings: List<ReadingEntity> = emptyList(),
     @SerialName("reminders") val reminders: List<ReminderEntity> = emptyList(),
+    /** Photo files (file name → base64), so a restore brings the pictures back too. */
+    @SerialName("files") val files: Map<String, String> = emptyMap(),
 )
 
 @Dao
@@ -69,6 +72,7 @@ interface PlannerBackupDao {
 class PlannerBackupSection @Inject constructor(
     private val db: PlannerDatabase,
     private val json: Json,
+    private val store: AttachmentStore,
 ) : BackupSection {
     override val key: String = KEY
 
@@ -90,11 +94,17 @@ class PlannerBackupSection @Inject constructor(
             trackers = dao.trackers(),
             readings = dao.readings(),
             reminders = dao.reminders(),
+            files = dao.attachments().mapNotNull { a ->
+                store.read(a.fileName)?.let { a.fileName to Base64.getEncoder().encodeToString(it) }
+            }.toMap(),
         ),
     )
 
     override suspend fun import(data: JsonElement) {
         val backup = json.decodeFromJsonElement(PlannerBackupData.serializer(), data)
+        backup.files.forEach { (name, b64) ->
+            runCatching { store.write(name, Base64.getDecoder().decode(b64)) }
+        }
         db.withTransaction {
             dao.upsertEntries(backup.entries)
             dao.upsertSeries(backup.series)

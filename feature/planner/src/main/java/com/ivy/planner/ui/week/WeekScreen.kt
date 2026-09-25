@@ -26,7 +26,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.ViewKanban
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.ivy.navigation.PlannerBoardsScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerReviewScreen
 import com.ivy.navigation.PlannerWeekScreen
@@ -140,8 +143,11 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
                                 fontWeight = FontWeight.Bold,
                             )
                         }
-                        TextButton(onClick = { nav.navigateTo(PlannerReviewScreen) }) {
-                            Text("Review", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { nav.navigateTo(PlannerBoardsScreen()) }) {
+                            Icon(Icons.Outlined.ViewKanban, "Boards", tint = PlannerColors.Accent)
+                        }
+                        IconButton(onClick = { nav.navigateTo(PlannerReviewScreen) }) {
+                            Icon(Icons.Outlined.FactCheck, "Weekly review", tint = PlannerColors.Accent)
                         }
                     }
                 }

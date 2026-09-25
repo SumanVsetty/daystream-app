@@ -41,6 +41,7 @@ abstract class PlannerDatabase : RoomDatabase() {
     abstract fun trackerDao(): TrackerDao
     abstract fun backupDao(): PlannerBackupDao
     abstract fun reminderDao(): ReminderDao
+    abstract fun attachmentDao(): AttachmentDao
 
     companion object {
         const val NAME = "apeiro_planner.db"

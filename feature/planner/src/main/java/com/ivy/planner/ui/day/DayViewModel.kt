@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewModelScope
+import com.ivy.planner.data.Library
+import com.ivy.planner.data.LibraryRepository
 import com.ivy.planner.data.PlannerPrefs
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.data.PlannerSnapshot
@@ -25,10 +27,15 @@ import com.ivy.planner.ui.MoneyItem
 import com.ivy.planner.ui.MoneySource
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerSelection
+import com.ivy.planner.ui.RowTag
 import com.ivy.planner.ui.label
 import com.ivy.planner.ui.withWeek
 import com.ivy.ui.ComposeViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.File
+import java.time.LocalDate
+import java.time.LocalTime
+import javax.inject.Inject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
@@ -36,9 +43,6 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.LocalTime
-import javax.inject.Inject
 
 /** A row on the Day log, ready to display. */
 @Immutable
@@ -59,8 +63,11 @@ data class DayRow(
     val durationMinutes: Int? = null,
     /** Expense or income from the money side (read-only here). */
     val money: MoneyItem? = null,
-    /** Softened: before "now" today and nothing left to do. */
-    val dimmed: Boolean = false,
+    /** Shown in the time column: "10:30", "All day". */
+    val timeLabel: String = "",
+    val importance: Int = 0,
+    val tags: List<RowTag> = emptyList(),
+    val photos: List<File> = emptyList(),
 )
 
 @Immutable
@@ -72,9 +79,6 @@ data class DayState(
     val overdue: ImmutableList<Entry>,
     val dots: ImmutableMap<LocalDate, Color>,
     val todoOnly: Boolean,
-    /** Index in [rows] before which the "now" marker goes (today only). */
-    val nowIndex: Int?,
-    val nowLabel: String,
     /** Index in [rows] to scroll to when opening today (one hour before now). */
     val scrollIndex: Int?,
 )
@@ -94,6 +98,7 @@ sealed interface DayEvent {
 @HiltViewModel
 class DayViewModel @Inject constructor(
     private val repository: PlannerRepository,
+    private val library: LibraryRepository,
     private val moneySource: MoneySource,
     private val prefs: PlannerPrefs,
 ) : ComposeViewModel<DayState, DayEvent>() {
@@ -114,19 +119,18 @@ class DayViewModel @Inject constructor(
         val money by produceState(initialValue = emptyList<MoneyItem>(), week, refresh) {
             value = moneySource.between(week.monday, week.sunday)
         }
+        val lib by remember { library.observe() }.collectAsState(initial = null)
 
         val s = snapshot ?: return DayState(
             date, today, "", persistentListOf(), persistentListOf(), persistentMapOf(),
-            todoOnly, null, "", null,
+            todoOnly, null,
         )
-        val allRows = (itemsFor(s, date, today).map { it.toRow(s, today) } + money.filter { it.date == date }.map { it.toRow() })
+        val allRows = (itemsFor(s, date, today).map { it.toRow(s, today).withLibrary(lib) } + money.filter { it.date == date }.map { it.toRow() })
             .sortedWith(compareBy<DayRow>({ it.time != null }, { it.time }, { it.title.lowercase() }))
         val isToday = date == today
-        val visible = if (todoOnly) allRows.filter { it.isToDo(isToday, now) } else allRows
-        val rows = visible.map { row -> row.copy(dimmed = row.shouldSoften(isToday, now)) }
+        val rows = if (todoOnly) allRows.filter { it.isToDo(isToday, now) } else allRows
         val open = allRows.count { it.isOpenTask() }
         val done = allRows.count { it.state == EntryState.DONE }
-        val nowIndex = if (isToday) rows.indexOfFirst { it.time != null && it.time >= now }.let { if (it < 0) rows.size else it } else null
         val oneHourAgo = now.minusHours(1).takeIf { now.hour >= 1 } ?: LocalTime.MIDNIGHT
         val scrollIndex = if (isToday) rows.indexOfFirst { it.time != null && it.time >= oneHourAgo }.takeIf { it > 0 } else null
         return DayState(
@@ -138,8 +142,6 @@ class DayViewModel @Inject constructor(
             dots = week.days.mapNotNull { d -> dotFor(itemsFor(s, d, today), d, today)?.let { d to it } }
                 .toMap().toImmutableMap(),
             todoOnly = todoOnly,
-            nowIndex = nowIndex,
-            nowLabel = "Now ${now.label()}",
             scrollIndex = scrollIndex,
         )
     }
@@ -152,18 +154,6 @@ class DayViewModel @Inject constructor(
         val start = time ?: return null
         val end = start.plusMinutes((durationMinutes ?: 60).toLong())
         return if (end < start) LocalTime.MAX else end // runs past midnight
-    }
-
-    /**
-     * Softening combines status and time:
-     * done / missed / skipped tasks always; today, notes and expenses before now,
-     * and timed events once they've ended. Open tasks and all-day events never.
-     */
-    private fun DayRow.shouldSoften(isToday: Boolean, now: LocalTime): Boolean = when {
-        money != null -> isToday && time != null && time < now
-        kind == EntryKind.TASK -> state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
-        kind == EntryKind.EVENT -> isToday && eventEnd()?.let { it <= now } ?: false
-        else -> isToday && (time == null || time < now) // notes and journal: records of the past
     }
 
     /** "To do": open tasks, and events that haven't ended (all-day events all day). */
@@ -201,11 +191,11 @@ class DayViewModel @Inject constructor(
             title = entry.title,
             description = entry.description,
             meta = listOfNotNull(
-                entry.time?.label(),
                 if (entry.kind == EntryKind.TASK && entry.time != null) duration(entry.durationMinutes) else null,
-                if (entry.kind == EntryKind.EVENT && entry.time == null) "All day" else null,
                 if (entry.migrationCount > 0) "migrated ${entry.migrationCount}×" else null,
             ).joinToString(" · "),
+            timeLabel = entry.time?.label() ?: if (entry.kind == EntryKind.EVENT) "All day" else "",
+            importance = entry.importance,
             state = entry.state,
             repeating = false,
             entryId = entry.id,
@@ -221,8 +211,8 @@ class DayViewModel @Inject constructor(
                 kind = series.kind,
                 title = title,
                 description = description,
+                timeLabel = sortTime?.label() ?: if (series.kind == EntryKind.EVENT) "All day" else "",
                 meta = listOfNotNull(
-                    sortTime?.label(),
                     if (series.kind == EntryKind.TASK && sortTime != null) duration(series.durationMinutes) else null,
                     repository.describe(series).replaceFirstChar { it.lowercase() },
                     dueSince?.let { "due since ${it.withWeek()}" },
@@ -245,7 +235,8 @@ class DayViewModel @Inject constructor(
         kind = EntryKind.NOTE,
         title = title,
         description = "",
-        meta = listOf(time.label(), account).filter { it.isNotBlank() }.joinToString(" · "),
+        meta = account,
+        timeLabel = time.label(),
         state = EntryState.OPEN,
         repeating = false,
         entryId = null,
@@ -254,6 +245,19 @@ class DayViewModel @Inject constructor(
         time = time,
         money = this,
     )
+
+    /** Adds board / collection tags, people and photos from the library. */
+    private fun DayRow.withLibrary(lib: Library?): DayRow {
+        if (lib == null) return this
+        val owner = entryId ?: seriesId ?: return this
+        val collections = lib.collectionsOf[owner].orEmpty().mapNotNull { lib.collection(it) }
+        val people = entryId?.let { lib.peopleOf[it] }.orEmpty().mapNotNull { lib.person(it)?.name }
+        return copy(
+            tags = collections.map { RowTag(it.name, Color(it.color)) },
+            meta = (listOf(meta) + people).filter { it.isNotBlank() }.joinToString(" · "),
+            photos = entryId?.let { lib.photosOf[it] }.orEmpty().map { library.photoFile(it) },
+        )
+    }
 
     override fun onEvent(event: DayEvent) {
         when (event) {
@@ -271,7 +275,7 @@ class DayViewModel @Inject constructor(
                     repository.setOccurrenceState(row.seriesId, row.date, newState)
                 }
             }
-            is DayEvent.RapidLog -> viewModelScope.launch { repository.rapidLog(event.text, selected) }
+            is DayEvent.RapidLog -> viewModelScope.launch { repository.rapidLog(event.text, selected, library) }
             is DayEvent.OverdueDone -> viewModelScope.launch { repository.setState(event.id, EntryState.DONE) }
             is DayEvent.OverdueMove -> viewModelScope.launch {
                 repository.move(event.id, event.date, today = LocalDate.now())

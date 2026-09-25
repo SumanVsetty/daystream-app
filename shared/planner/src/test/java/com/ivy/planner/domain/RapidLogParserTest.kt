@@ -78,4 +78,34 @@ class RapidLogParserTest {
         p("sunil follow up").date shouldBe null
         p("check 2 invoices").let { it.date shouldBe null; it.time shouldBe null; it.title shouldBe "Check 2 invoices" }
     }
+
+    @Test
+    fun `hashtags pick the board and leave the title clean`() {
+        val r = p("Hamayan A818 quote #quotes tomorrow")
+        r.title shouldBe "Hamayan A818 quote"
+        r.tags shouldBe listOf("quotes")
+        r.date shouldBe today.plusDays(1)
+        p("fix invoice #tl-quotes #urgent").tags shouldBe listOf("tl-quotes", "urgent")
+        p("L&T #1 priority").tags shouldBe listOf("1")
+    }
+
+    @Test
+    fun `sentence case keeps the rest as typed`() {
+        TextCase.sentence("iPhone repair") shouldBe "iPhone repair"
+        TextCase.sentence("call mr.sunil") shouldBe "Call mr.sunil"
+        TextCase.sentence("call HDFC") shouldBe "Call HDFC"
+        TextCase.sentenceLines("karthik lawyer\n  startup application") shouldBe "Karthik lawyer\n  Startup application"
+    }
+
+    @Test
+    fun `tags match collections loosely`() {
+        val cs = listOf(
+            Collection("1", "TL-Quotes-Pending", 0, CollectionType.BOARD),
+            Collection("2", "Car", 0, CollectionType.TOPIC),
+        )
+        TagMatch.find("quotes", cs)?.id shouldBe "1"
+        TagMatch.find("tl-quotes", cs)?.id shouldBe "1"
+        TagMatch.find("CAR", cs)?.id shouldBe "2"
+        TagMatch.find("house", cs) shouldBe null
+    }
 }

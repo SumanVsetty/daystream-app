@@ -1,6 +1,12 @@
 package com.ivy.planner.ui.edit
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,8 +16,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,6 +28,7 @@ import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.ViewKanban
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,20 +52,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
+import com.ivy.planner.domain.CollectionType
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.ui.KindChip
+import com.ivy.planner.ui.Pill
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
 import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.PlannerTimePicker
 import com.ivy.planner.ui.SectionLabel
+import com.ivy.planner.ui.journal.ImportancePicker
+import com.ivy.planner.ui.journal.NameDialog
 import com.ivy.planner.ui.label
 import com.ivy.planner.ui.withWeek
 import java.time.LocalDate
@@ -90,6 +107,8 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
     var customRepeat by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var durationMenu by remember { mutableStateOf(false) }
+    var addPerson by remember { mutableStateOf(false) }
+    var addCollection by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -192,6 +211,34 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 }
             }
 
+            if (state.kind == EntryKind.TASK) {
+                BoardField(state, onEvent)
+            }
+            if (state.kind == EntryKind.JOURNAL) {
+                HorizontalDivider()
+                SectionLabel("Importance", MaterialTheme.colorScheme.onSurfaceVariant)
+                ImportancePicker(state.importance) { onEvent(EditorEvent.SetImportance(it)) }
+                SectionLabel("People", MaterialTheme.colorScheme.onSurfaceVariant)
+                ChipPicker(
+                    items = state.library?.people.orEmpty().map { it.id to it.name },
+                    selected = state.peopleIds,
+                    addLabel = "+ Person",
+                    onToggle = { onEvent(EditorEvent.TogglePerson(it)) },
+                    onAdd = { addPerson = true },
+                )
+                SectionLabel("Collections", MaterialTheme.colorScheme.onSurfaceVariant)
+                ChipPicker(
+                    items = state.library?.collections.orEmpty().filter { it.type == CollectionType.TOPIC }.map { it.id to it.name },
+                    selected = state.collectionIds,
+                    addLabel = "+ Collection",
+                    onToggle = { onEvent(EditorEvent.ToggleCollection(it)) },
+                    onAdd = { addCollection = true },
+                )
+            }
+            if (!state.isOccurrence) {
+                SectionLabel("Photos", MaterialTheme.colorScheme.onSurfaceVariant)
+                PhotosField(state, onEvent)
+            }
             if (state.isOccurrence) {
                 HorizontalDivider()
                 SectionLabel("This repeating ${state.kind.name.lowercase()}", MaterialTheme.colorScheme.onSurfaceVariant)
@@ -268,6 +315,18 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
             dismissButton = { TextButton(onClick = { onEvent(EditorEvent.DismissScope) }) { Text("Cancel") } },
         )
     }
+    if (addPerson) {
+        NameDialog("New person", onDone = {
+            addPerson = false
+            onEvent(EditorEvent.AddPerson(it))
+        }, onDismiss = { addPerson = false })
+    }
+    if (addCollection) {
+        NameDialog("New collection", onDone = {
+            addCollection = false
+            onEvent(EditorEvent.AddCollection(it))
+        }, onDismiss = { addCollection = false })
+    }
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -339,4 +398,94 @@ private fun durationLabel(minutes: Int): String = when {
     minutes < 60 -> "$minutes min"
     minutes % 60 == 0 -> "${minutes / 60} h"
     else -> "${minutes / 60} h ${minutes % 60} min"
+}
+
+/** Board for a task: a dropdown of boards, or none. */
+@Composable
+private fun BoardField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val boards = state.library?.collections.orEmpty().filter { it.type == CollectionType.BOARD }
+    val current = boards.firstOrNull { it.id == state.boardId }
+    Box {
+        FieldRow(Icons.Outlined.ViewKanban, "Board", current?.name ?: "None", highlight = current != null) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("None") }, onClick = { open = false; onEvent(EditorEvent.SetBoard(null)) })
+            boards.forEach { b ->
+                DropdownMenuItem(
+                    text = { Text(b.name) },
+                    leadingIcon = { Box(Modifier.size(10.dp).clip(CircleShape).background(Color(b.color))) },
+                    onClick = { open = false; onEvent(EditorEvent.SetBoard(b.id)) },
+                )
+            }
+        }
+    }
+}
+
+/** Toggleable chips with an add button (people, collections). */
+@Composable
+private fun ChipPicker(
+    items: List<Pair<String, String>>,
+    selected: Set<String>,
+    addLabel: String,
+    onToggle: (String) -> Unit,
+    onAdd: () -> Unit,
+) {
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEach { (id, name) -> Pill(name, id in selected, { onToggle(id) }) }
+        TextButton(onClick = onAdd) { Text(addLabel, color = PlannerColors.Accent, fontWeight = FontWeight.Bold) }
+    }
+}
+
+/** Photo thumbnails with remove buttons, and "+ Photo" using the system photo picker. */
+@Composable
+private fun PhotosField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(6)) { uris ->
+        if (uris.isNotEmpty()) onEvent(EditorEvent.AddPhotos(uris))
+    }
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        state.photos.forEach { (id, file) -> Thumb(file, onRemove = { onEvent(EditorEvent.RemovePhoto(id)) }) }
+        state.pendingPhotos.forEach { uri -> Thumb(uri, onRemove = { onEvent(EditorEvent.RemovePendingPhoto(uri)) }) }
+        Box(
+            Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                .clickable {
+                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("+ Photo", color = PlannerColors.Accent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun Thumb(model: Any, onRemove: () -> Unit) {
+    Box(Modifier.size(72.dp)) {
+        AsyncImage(
+            model = model,
+            contentDescription = "Photo",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)),
+        )
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(Color(0xCC1B1D1B))
+                .clickable(onClick = onRemove),
+            contentAlignment = Alignment.Center,
+        ) { Text("✕", color = Color.White, fontSize = 11.sp) }
+    }
 }

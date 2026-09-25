@@ -67,7 +67,6 @@ import com.ivy.planner.ui.CheckCircle
 import com.ivy.planner.ui.DayTitleFmt
 import com.ivy.planner.ui.EntryRow
 import com.ivy.planner.ui.MonthCalendar
-import com.ivy.planner.ui.NowMarker
 import com.ivy.planner.ui.Pill
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
@@ -101,7 +100,7 @@ fun PlannerDayTab() {
 private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) {
     val nav = navigation()
     var monthOpen by remember { mutableStateOf(false) }
-    val colors = state.rows.map { timelineColor(it.kind, it.state, isMoney = it.money != null) }
+    val colors = state.rows.map { timelineColor(it.kind, it.state, isMoney = it.money != null, importance = it.importance) }
     val listState = rememberLazyListState()
 
     // reload expenses whenever the screen comes back (e.g. after adding one in the wallet)
@@ -124,7 +123,6 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
         if (state.rows.isEmpty()) return@LaunchedEffect
         scrolledFor = state.date
         if (target != null) {
-            // the "now" marker is drawn inside its row's item, so it adds no list positions
             listState.scrollToItem(leadingItems + target)
         } else {
             listState.scrollToItem(0)
@@ -191,8 +189,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                 }
             }
             itemsIndexed(state.rows, key = { _, row -> row.key }) { index, row ->
-                if (index == state.nowIndex) NowMarker(state.nowLabel)
-                Column(Modifier.padding(start = 10.dp, end = 12.dp)) {
+                Column(Modifier.padding(start = 2.dp, end = 8.dp)) {
                     EntryRow(
                         lineAbove = if (index > 0) colors[index - 1] else null,
                         lineBelow = if (index < state.rows.lastIndex) colors[index] else null,
@@ -205,7 +202,10 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                         onToggle = { onEvent(DayEvent.Toggle(row)) },
                         moneyLabel = row.money?.label,
                         moneyIsIncome = row.money?.isIncome ?: false,
-                        dimmed = row.dimmed,
+                        timeLabel = row.timeLabel,
+                        importance = row.importance,
+                        tags = row.tags,
+                        photos = row.photos,
                         onClick = {
                             val m = row.money
                             if (m != null) {
@@ -228,9 +228,7 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                     )
                 }
             }
-            if (state.nowIndex != null && state.nowIndex == state.rows.size && state.rows.isNotEmpty()) {
-                item { NowMarker(state.nowLabel) }
-            }
+
         }
     }
 

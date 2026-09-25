@@ -9,6 +9,7 @@ import com.ivy.planner.domain.IsoWeek
 import com.ivy.planner.domain.OccurrenceRecord
 import com.ivy.planner.domain.Planner
 import com.ivy.planner.domain.RapidLogParser
+import com.ivy.planner.domain.TextCase
 import com.ivy.planner.domain.RepeatCodec
 import com.ivy.planner.domain.RepeatEnd
 import com.ivy.planner.domain.Series
@@ -80,8 +81,8 @@ class PlannerRepository @Inject constructor(
         val entry = Entry(
             id = id,
             kind = kind,
-            title = title.trim(),
-            description = description,
+            title = TextCase.sentence(title.trim()),
+            description = TextCase.sentenceLines(description),
             date = date,
             time = time ?: defaultTime(kind, date, durationMinutes, excludeId = id),
             week = week,
@@ -95,16 +96,22 @@ class PlannerRepository @Inject constructor(
      * Rapid log: understands day, time and duration in the text (see [RapidLogParser]).
      * Without a day it goes on [selectedDate].
      */
-    suspend fun rapidLog(text: String, selectedDate: LocalDate): String? {
+    suspend fun rapidLog(text: String, selectedDate: LocalDate?, library: LibraryRepository? = null, boardId: String? = null): String? {
         val parsed = RapidLogParser.parse(text, LocalDate.now())
         if (parsed.title.isBlank()) return null
-        return quickAdd(
+        val id = quickAdd(
             kind = parsed.kind,
             title = parsed.title,
             date = parsed.date ?: selectedDate,
+            week = (parsed.date ?: selectedDate)?.isoWeek(),
             time = parsed.time,
             durationMinutes = parsed.durationMinutes,
         )
+        if (library != null) {
+            val collections = library.resolveTags(parsed.tags) + listOfNotNull(boardId)
+            if (collections.isNotEmpty()) library.setCollections(id, collections)
+        }
+        return id
     }
 
     /**
@@ -147,7 +154,19 @@ class PlannerRepository @Inject constructor(
         val existing = entryDao.findById(entry.id)
         val week = entry.date?.isoWeek() ?: entry.week
         val time = entry.time ?: defaultTime(entry.kind, entry.date, entry.durationMinutes, excludeId = entry.id)
-        entryDao.upsert(entry.copy(week = week, time = time).toEntity(createdAt = existing?.createdAt ?: now(), now = now()))
+        entryDao.upsert(
+            entry.copy(
+                week = week,
+                time = time,
+                title = TextCase.sentence(entry.title.trim()),
+                description = TextCase.sentenceLines(entry.description),
+            ).toEntity(createdAt = existing?.createdAt ?: now(), now = now()),
+        )
+    }
+
+    suspend fun setImportance(id: String, level: Int) {
+        val e = entryDao.findById(id) ?: return
+        if (e.importance != level) entryDao.upsert(e.copy(importance = level, updatedAt = now()))
     }
 
     suspend fun setState(id: String, state: EntryState) {
@@ -212,7 +231,13 @@ class PlannerRepository @Inject constructor(
         } else {
             null
         }
-        seriesDao.upsert(series.copy(time = time).toEntity(createdAt = existing?.createdAt ?: now(), now = now()))
+        seriesDao.upsert(
+            series.copy(
+                time = time,
+                title = TextCase.sentence(series.title.trim()),
+                description = TextCase.sentenceLines(series.description),
+            ).toEntity(createdAt = existing?.createdAt ?: now(), now = now()),
+        )
     }
 
     // ---------------------------------------------------------------- reminders

@@ -42,6 +42,12 @@ interface EntryDao {
     @Query("SELECT * FROM entries WHERE date = :date")
     suspend fun onDate(date: Long): List<EntryEntity>
 
+    @Query("SELECT * FROM entries")
+    fun observeAll(): Flow<List<EntryEntity>>
+
+    @Query("SELECT * FROM entries")
+    suspend fun all(): List<EntryEntity>
+
     /** Journal entries and notes, newest first. */
     @Query("SELECT * FROM entries WHERE kind IN ('JOURNAL', 'NOTE') ORDER BY date DESC, time_minutes DESC, created_at DESC")
     fun observeJournal(): Flow<List<EntryEntity>>
@@ -125,6 +131,15 @@ interface CollectionDao {
 
     @Query("DELETE FROM collections WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("DELETE FROM entry_collections WHERE collection_id = :collectionId")
+    suspend fun unlinkCollection(collectionId: String)
+
+    @Query("SELECT * FROM collections")
+    suspend fun all(): List<CollectionEntity>
+
+    @Query("SELECT collection_id FROM entry_collections WHERE owner_id = :ownerId")
+    suspend fun collectionsOf(ownerId: String): List<String>
 }
 
 @Dao
@@ -137,6 +152,39 @@ interface PeopleDao {
 
     @Query("SELECT * FROM people ORDER BY name")
     fun observeAll(): Flow<List<PersonEntity>>
+
+    @Query("SELECT * FROM entry_people")
+    fun observeTags(): Flow<List<EntryPersonEntity>>
+
+    @Query("SELECT person_id FROM entry_people WHERE entry_id = :entryId")
+    suspend fun peopleOf(entryId: String): List<String>
+
+    @Query("DELETE FROM entry_people WHERE entry_id = :entryId")
+    suspend fun untagAll(entryId: String)
+
+    @Query("DELETE FROM entry_people WHERE person_id = :personId")
+    suspend fun untagPerson(personId: String)
+
+    @Query("DELETE FROM people WHERE id = :id")
+    suspend fun delete(id: String)
+}
+
+@Dao
+interface AttachmentDao {
+    @Upsert
+    suspend fun upsert(attachment: AttachmentEntity)
+
+    @Query("SELECT * FROM attachments ORDER BY created_at")
+    fun observeAll(): Flow<List<AttachmentEntity>>
+
+    @Query("SELECT * FROM attachments WHERE entry_id = :entryId ORDER BY created_at")
+    suspend fun forEntry(entryId: String): List<AttachmentEntity>
+
+    @Query("SELECT * FROM attachments WHERE id = :id")
+    suspend fun findById(id: String): AttachmentEntity?
+
+    @Query("DELETE FROM attachments WHERE id = :id")
+    suspend fun delete(id: String)
 }
 
 @Dao

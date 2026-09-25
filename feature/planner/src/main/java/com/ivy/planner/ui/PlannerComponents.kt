@@ -22,9 +22,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.Icon
@@ -34,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,16 +47,21 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
 import com.ivy.planner.domain.RapidLogParser
 import com.ivy.planner.domain.isoWeek
+import java.io.File
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
@@ -74,67 +80,87 @@ fun SectionLabel(text: String, color: Color = PlannerColors.Accent) {
     )
 }
 
-/** The round Taskito-style checkbox. */
+/** The round Taskito-style checkbox (20dp circle in a 28dp touch column). */
 @Composable
 fun CheckCircle(
     checked: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    size: Dp = 20.dp,
 ) {
-    IconButton(onClick = onToggle, enabled = enabled, modifier = modifier.size(40.dp)) {
+    Box(
+        modifier = modifier
+            .size(28.dp)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
         if (checked) {
             Box(
-                modifier = Modifier.size(24.dp).clip(CircleShape).background(PlannerColors.Done),
+                modifier = Modifier.size(size).clip(CircleShape).background(PlannerColors.Done),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Check, contentDescription = "Mark not done", tint = PlannerColors.OnDone, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Check, contentDescription = "Mark not done", tint = PlannerColors.OnDone, modifier = Modifier.size(size * 0.66f))
             }
         } else {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(size)
                     .border(2.dp, if (enabled) PlannerColors.Done else PlannerColors.Missed, CircleShape),
             )
         }
     }
 }
 
-/** Leading symbol for an entry: checkbox for tasks, calendar for events, dash for notes. */
+/** Importance colours, level 1–4 (0 = none, shown in the journal's butter yellow). */
+fun importanceColor(level: Int): Color = when (level) {
+    1 -> PlannerColors.Done
+    2 -> PlannerColors.Journal
+    3 -> PlannerColors.Accent
+    4 -> Color(0xFFEF9A9A)
+    else -> PlannerColors.Journal
+}
+
+/** Leading symbol: checkbox for tasks, calendar for events, dot for notes, star for journal. */
 @Composable
-fun EntryLeading(kind: EntryKind, state: EntryState, onToggle: () -> Unit) {
+fun EntryLeading(kind: EntryKind, state: EntryState, onToggle: () -> Unit, importance: Int = 0) {
     when (kind) {
         EntryKind.TASK -> CheckCircle(
             checked = state == EntryState.DONE,
             onToggle = onToggle,
             enabled = state != EntryState.MISSED,
         )
-        EntryKind.EVENT -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Icon(Icons.Outlined.CalendarToday, contentDescription = "Event", tint = PlannerColors.Event, modifier = Modifier.size(20.dp))
+        EntryKind.EVENT -> Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.CalendarToday, contentDescription = "Event", tint = PlannerColors.Event, modifier = Modifier.size(17.dp))
         }
-        EntryKind.NOTE -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(9.dp).clip(CircleShape).background(PlannerColors.Done))
+        EntryKind.NOTE -> Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(PlannerColors.Done))
         }
-        EntryKind.JOURNAL -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.Star, contentDescription = "Journal", tint = PlannerColors.Journal, modifier = Modifier.size(22.dp))
+        EntryKind.JOURNAL -> Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Star, contentDescription = "Journal", tint = importanceColor(importance), modifier = Modifier.size(19.dp))
         }
     }
 }
 
 /** The colour of an entry's timeline segment. */
 @Composable
-fun timelineColor(kind: EntryKind, state: EntryState, isMoney: Boolean = false): Color = when {
+fun timelineColor(kind: EntryKind, state: EntryState, isMoney: Boolean = false, importance: Int = 0): Color = when {
     isMoney -> PlannerColors.Accent
     kind == EntryKind.EVENT -> PlannerColors.Event
-    kind == EntryKind.JOURNAL -> PlannerColors.Journal
+    kind == EntryKind.JOURNAL -> importanceColor(importance)
     kind == EntryKind.NOTE -> MaterialTheme.colorScheme.outlineVariant
     state == EntryState.MISSED || state == EntryState.SKIPPED -> MaterialTheme.colorScheme.outlineVariant
     else -> PlannerColors.Done
 }
 
+/** A small coloured tag, e.g. the board a task belongs to. */
+@Immutable
+data class RowTag(val name: String, val color: Color)
+
 /**
- * One line on the Day log. [lineAbove] and [lineBelow] draw the vertical timeline
- * that connects consecutive entries (null = no segment, e.g. first or last entry).
+ * One line on a timeline, in the compact layout: time on the left, then the icon on the
+ * connecting line, then the text. [lineAbove] / [lineBelow] draw the line (null = none).
  */
 @Composable
 fun EntryRow(
@@ -146,11 +172,14 @@ fun EntryRow(
     repeating: Boolean,
     onToggle: () -> Unit,
     onClick: () -> Unit,
+    timeLabel: String = "",
     lineAbove: Color? = null,
     lineBelow: Color? = null,
     moneyLabel: String? = null,
     moneyIsIncome: Boolean = false,
-    dimmed: Boolean = false,
+    importance: Int = 0,
+    tags: List<RowTag> = emptyList(),
+    photos: List<File> = emptyList(),
 ) {
     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -159,30 +188,40 @@ fun EntryRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .clickable(onClick = onClick)
-            .alpha(if (dimmed) 0.5f else 1f),
+            .clickable(onClick = onClick),
         verticalAlignment = Alignment.Top,
     ) {
+        // time column
+        Text(
+            text = timeLabel,
+            modifier = Modifier.width(36.dp).padding(top = 8.dp),
+            fontSize = if (timeLabel.length > 5) 10.sp else 11.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = muted,
+            textAlign = TextAlign.End,
+        )
+        // icon on the line
         Box(
             modifier = Modifier
-                .width(40.dp)
+                .width(28.dp)
                 .fillMaxHeight()
                 .drawBehind {
                     val x = size.width / 2
                     val stroke = 2.dp.toPx()
-                    // the icon occupies roughly 8dp..32dp of the 40dp leading slot
-                    lineAbove?.let { drawLine(it, Offset(x, 0f), Offset(x, 6.dp.toPx()), stroke) }
-                    lineBelow?.let { drawLine(it, Offset(x, 34.dp.toPx()), Offset(x, size.height), stroke) }
+                    // the icon sits in the top 28dp; its visible part spans about 4..24dp
+                    lineAbove?.let { drawLine(it, Offset(x, 0f), Offset(x, 4.dp.toPx()), stroke) }
+                    lineBelow?.let { drawLine(it, Offset(x, 25.dp.toPx()), Offset(x, size.height), stroke) }
                 },
             contentAlignment = Alignment.TopCenter,
         ) {
-            if (moneyLabel != null) MoneyBadge(moneyIsIncome) else EntryLeading(kind, state, onToggle)
+            if (moneyLabel != null) MoneyBadge(moneyIsIncome) else EntryLeading(kind, state, onToggle, importance)
         }
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f).padding(top = 8.dp, end = 8.dp, bottom = 16.dp)) {
+        Column(Modifier.weight(1f).padding(start = 6.dp, top = 4.dp, end = 6.dp, bottom = 8.dp)) {
             Text(
                 text = title,
-                fontSize = 17.sp,
+                fontSize = 16.sp,
+                lineHeight = 21.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (faded || kind == EntryKind.NOTE) muted else onSurface,
                 textDecoration = if (state == EntryState.DONE) TextDecoration.LineThrough else null,
@@ -190,28 +229,49 @@ fun EntryRow(
             if (description.isNotBlank()) {
                 Text(
                     text = description,
-                    fontSize = 15.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
                     color = muted,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = 1.dp),
                 )
             }
-            if (meta.isNotBlank() || repeating) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            if (meta.isNotBlank() || repeating || tags.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 1.dp)) {
                     if (repeating) {
-                        Icon(Icons.Outlined.Repeat, contentDescription = "Repeats", tint = muted, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Outlined.Repeat, contentDescription = "Repeats", tint = muted, modifier = Modifier.size(12.dp))
                         Spacer(Modifier.width(4.dp))
                     }
-                    Text(meta, fontSize = 13.sp, color = if (state == EntryState.MISSED) PlannerColors.Accent else muted)
+                    if (meta.isNotBlank()) {
+                        Text(meta, fontSize = 12.sp, color = if (state == EntryState.MISSED) PlannerColors.Accent else muted)
+                    }
+                    tags.forEach { tag ->
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.size(6.dp).clip(CircleShape).background(tag.color))
+                        Spacer(Modifier.width(4.dp))
+                        Text(tag.name, fontSize = 12.sp, color = muted, maxLines = 1)
+                    }
+                }
+            }
+            if (photos.isNotEmpty()) {
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    photos.take(3).forEach { f ->
+                        AsyncImage(
+                            model = f,
+                            contentDescription = "Photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(width = 56.dp, height = 44.dp).clip(RoundedCornerShape(8.dp)),
+                        )
+                    }
                 }
             }
         }
         if (moneyLabel != null) {
             Text(
                 moneyLabel,
-                modifier = Modifier.padding(top = 10.dp, end = 12.dp),
-                fontSize = 15.sp,
+                modifier = Modifier.padding(top = 5.dp, end = 10.dp),
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (moneyIsIncome) PlannerColors.Done else PlannerColors.Accent,
             )
@@ -222,31 +282,16 @@ fun EntryRow(
 /** ₹ badge for expenses (peach) and income (mint). */
 @Composable
 fun MoneyBadge(isIncome: Boolean) {
-    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
         Box(
             Modifier
-                .size(24.dp)
+                .size(20.dp)
                 .clip(CircleShape)
                 .background(if (isIncome) PlannerColors.Done else PlannerColors.Accent),
             contentAlignment = Alignment.Center,
         ) {
-            Text("₹", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = if (isIncome) PlannerColors.OnDone else PlannerColors.OnAccent)
+            Text("₹", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = if (isIncome) PlannerColors.OnDone else PlannerColors.OnAccent)
         }
-    }
-}
-
-/** The thin "Now 14:20" line across the timeline. */
-@Composable
-fun NowMarker(label: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 14.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(PlannerColors.Accent))
-        Spacer(Modifier.width(6.dp))
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PlannerColors.Accent)
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.weight(1f).height(1.5.dp).background(PlannerColors.Accent.copy(alpha = 0.6f)))
     }
 }
 

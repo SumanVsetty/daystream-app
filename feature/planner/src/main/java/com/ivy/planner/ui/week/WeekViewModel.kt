@@ -10,6 +10,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
+import com.ivy.planner.data.LibraryRepository
 import com.ivy.planner.data.PlannerPrefs
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.domain.DayItem
@@ -78,6 +79,7 @@ sealed interface WeekEvent {
 @HiltViewModel
 class WeekViewModel @Inject constructor(
     private val repository: PlannerRepository,
+    private val library: LibraryRepository,
     private val moneySource: MoneySource,
     private val prefs: PlannerPrefs,
 ) : ComposeViewModel<WeekState, WeekEvent>() {
@@ -157,11 +159,12 @@ class WeekViewModel @Inject constructor(
                 // "send quote on friday" lands on Friday; otherwise it's a task for the week
                 val parsed = RapidLogParser.parse(event.title, LocalDate.now())
                 if (parsed.title.isBlank()) return@launch
-                if (parsed.date != null) {
+                val id = if (parsed.date != null) {
                     repository.quickAdd(parsed.kind, parsed.title, parsed.date, time = parsed.time, durationMinutes = parsed.durationMinutes)
                 } else {
                     repository.quickAdd(parsed.kind, parsed.title, date = null, week = week, durationMinutes = parsed.durationMinutes)
                 }
+                if (parsed.tags.isNotEmpty()) library.setCollections(id, library.resolveTags(parsed.tags))
             }
             is WeekEvent.ToggleLine -> viewModelScope.launch {
                 val line = event.line

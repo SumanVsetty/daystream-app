@@ -23,6 +23,8 @@ object RapidLogParser {
         val date: LocalDate?,
         val time: LocalTime?,
         val durationMinutes: Int?,
+        /** Hashtags, e.g. "#quotes" → "quotes": the board or collection to put it in. */
+        val tags: List<String> = emptyList(),
     ) {
         val understoodSomething get() = date != null || time != null || durationMinutes != null
     }
@@ -60,6 +62,10 @@ object RapidLogParser {
         var date: LocalDate? = null
         var time: LocalTime? = null
         var duration: Int? = null
+
+        // hashtags: "#quotes", "#tl-quotes"
+        val tags = Regex("""(?<=\s)#([\p{L}\p{N}][\p{L}\p{N}_\-]*)""").findAll(text).map { it.groupValues[1] }.toList()
+        text = text.replace(Regex("""(?<=\s)#[\p{L}\p{N}][\p{L}\p{N}_\-]*"""), " ")
 
         fun take(regex: Regex, handle: (MatchResult) -> Boolean) {
             val m = regex.find(text) ?: return
@@ -157,13 +163,14 @@ object RapidLogParser {
             true
         }
 
-        val title = text.trim()
-            .replace(Regex("""\s{2,}"""), " ")
-            .trimEnd(',', ';', '-', '–')
-            .replace(Regex("""\s+(at|on|by|for)$""", o), "")
-            .trim()
-            .replaceFirstChar { it.uppercase() }
-        return Result(kind, title, date, time, duration)
+        val title = TextCase.sentence(
+            text.trim()
+                .replace(Regex("""\s{2,}"""), " ")
+                .trimEnd(',', ';', '-', '–')
+                .replace(Regex("""\s+(at|on|by|for)$""", o), "")
+                .trim(),
+        )
+        return Result(kind, title, date, time, duration, tags)
     }
 
     /** The coming [dow] after today; "this friday" on a Friday means today. */
