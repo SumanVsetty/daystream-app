@@ -9,18 +9,19 @@ import com.ivy.planner.domain.IsoWeek
 import com.ivy.planner.domain.OccurrenceRecord
 import com.ivy.planner.domain.Planner
 import com.ivy.planner.domain.RapidLogParser
+import com.ivy.planner.domain.ReminderTarget
 import com.ivy.planner.domain.RepeatCodec
 import com.ivy.planner.domain.RepeatEnd
 import com.ivy.planner.domain.Series
 import com.ivy.planner.domain.isoWeek
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 
 /** Everything the planner screens need for a range of days. */
 data class PlannerSnapshot(
@@ -34,6 +35,7 @@ data class PlannerSnapshot(
 @Singleton
 class PlannerRepository @Inject constructor(
     private val db: PlannerDatabase,
+    private val prefs: PlannerPrefs,
 ) {
     private val entryDao get() = db.entryDao()
     private val seriesDao get() = db.seriesDao()
@@ -106,6 +108,10 @@ class PlannerRepository @Inject constructor(
             time = parsed.time,
             durationMinutes = parsed.durationMinutes,
         )
+        // a time you typed yourself gets the default reminder
+        if (parsed.time != null && (parsed.kind == EntryKind.TASK || parsed.kind == EntryKind.EVENT)) {
+            prefs.defaultReminder?.let { setReminders(id, listOf(it)) }
+        }
         if (library != null) {
             val collections = library.resolveTags(parsed.tags) + listOfNotNull(boardId)
             if (collections.isNotEmpty()) library.setCollections(id, collections)
@@ -240,6 +246,55 @@ class PlannerRepository @Inject constructor(
     }
 
     // ---------------------------------------------------------------- reminders
+
+    /** Emits whenever anything that affects reminders changes. */
+    fun reminderChanges(): Flow<Any> = combine(
+        entryDao.observeAll(),
+        seriesDao.observeAll(),
+        occurrenceDao.observeSince(LocalDate.now().minusDays(1).toEpochDay()),
+        db.reminderDao().observeAll(),
+    ) { a, b, c, d -> listOf(a.size, b.size, c.size, d.size, a.hashCode(), b.hashCode(), c.hashCode(), d.hashCode()) }
+
+    suspend fun allReminders(): Map<String, List<Int>> =
+        db.reminderDao().all().groupBy({ it.ownerId }, { it.minutesBefore })
+
+    /** Open, timed tasks and events (one-off, and days of repeating series) in [from]..[to]. */
+    suspend fun reminderTargets(from: LocalDate, to: LocalDate): List<ReminderTarget> {
+        val today = LocalDate.now()
+        val singles = entryDao.between(from.toEpochDay(), to.toEpochDay()).map { it.toDomain() }
+            .filter { (it.kind == EntryKind.TASK || it.kind == EntryKind.EVENT) && it.state == EntryState.OPEN }
+            .mapNotNull { e ->
+                val date = e.date ?: return@mapNotNull null
+                val time = e.time ?: return@mapNotNull null
+                ReminderTarget(e.id, false, date, time, e.title, e.kind, e.durationMinutes)
+            }
+        val series = seriesDao.all().mapNotNull { it.toDomain() }
+        val records = occurrenceDao.since(from.toEpochDay()).map { it.toDomain() }.groupBy { it.seriesId }
+        val occurrences = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.flatMap { day ->
+            Planner.dayItems(day, today, emptyList(), series, records)
+                .filterIsInstance<DayItem.Occurrence>()
+                .filter { it.state == EntryState.OPEN }
+                .mapNotNull { o ->
+                    val time = o.sortTime ?: return@mapNotNull null
+                    ReminderTarget(o.series.id, true, day, time, o.title, o.series.kind, o.series.durationMinutes)
+                }
+        }.toList()
+        return singles + occurrences
+    }
+
+    /** Moves a one-off entry to an exact date and time (from the reschedule sheet). */
+    suspend fun reschedule(id: String, date: LocalDate, time: LocalTime) {
+        val e = entryDao.findById(id) ?: return
+        entryDao.upsert(
+            e.copy(
+                date = date.toEpochDay(),
+                timeMinutes = time.toMinutes(),
+                weekYear = date.isoWeek().year,
+                weekNum = date.isoWeek().week,
+                updatedAt = now(),
+            ),
+        )
+    }
 
     suspend fun reminders(ownerId: String): List<Int> = db.reminderDao().forOwner(ownerId).map { it.minutesBefore }
 

@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Timer
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.outlined.ViewKanban
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -67,6 +69,7 @@ import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.planner.domain.CollectionType
 import com.ivy.planner.domain.EntryKind
+import com.ivy.planner.domain.ReminderPlanner
 import com.ivy.planner.ui.KindChip
 import com.ivy.planner.ui.Pill
 import com.ivy.planner.ui.PlannerColors
@@ -215,6 +218,9 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 }
             }
 
+            if (state.kind == EntryKind.TASK || state.kind == EntryKind.EVENT) {
+                RemindersField(state, onEvent)
+            }
             if (state.kind == EntryKind.TASK) {
                 BoardField(state, onEvent)
             }
@@ -491,5 +497,26 @@ private fun Thumb(model: Any, onRemove: () -> Unit) {
                 .clickable(onClick = onRemove),
             contentAlignment = Alignment.Center,
         ) { Text("✕", color = Color.White, fontSize = 11.sp) }
+    }
+}
+
+/** Reminders: several allowed, e.g. "10 min before" and "At the time". */
+@Composable
+private fun RemindersField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val summary = if (state.reminders.isEmpty()) "None" else state.reminders.sortedDescending().joinToString(", ") { ReminderPlanner.label(it) }
+    Box {
+        FieldRow(Icons.Outlined.Notifications, "Reminders", summary, highlight = state.reminders.isNotEmpty()) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ReminderPlanner.CHOICES.forEach { m ->
+                DropdownMenuItem(
+                    text = { Text(ReminderPlanner.label(m)) },
+                    leadingIcon = {
+                        Checkbox(checked = m in state.reminders, onCheckedChange = { onEvent(EditorEvent.ToggleReminder(m)) })
+                    },
+                    onClick = { onEvent(EditorEvent.ToggleReminder(m)) },
+                )
+            }
+        }
     }
 }

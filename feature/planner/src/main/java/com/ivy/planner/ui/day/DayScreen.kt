@@ -1,5 +1,10 @@
 package com.ivy.planner.ui.day
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,10 +52,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ivy.base.model.TransactionType
@@ -104,17 +111,29 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
     val colors = state.rows.map { timelineColor(it.kind, it.state, isMoney = it.money != null, importance = it.importance) }
     val listState = rememberLazyListState()
 
+    // notifications need permission on Android 13+; a slim banner asks until it's allowed
+    val context = LocalContext.current
+    fun notificationsAllowed() = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    var notifyAllowed by remember { mutableStateOf(notificationsAllowed()) }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifyAllowed = it }
+
     // reload expenses whenever the screen comes back (e.g. after adding one in the wallet)
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) onEvent(DayEvent.Refresh) }
+        val observer = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) {
+                onEvent(DayEvent.Refresh)
+                notifyAllowed = notificationsAllowed()
+            }
+        }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // items above the timeline, to translate a row index into a list position
     val showBanner = state.date == state.today && state.today.dayOfWeek == java.time.DayOfWeek.MONDAY
-    val leadingItems = (if (showBanner) 1 else 0) + (if (state.overdue.isNotEmpty()) 1 else 0) +
+    val leadingItems = (if (!notifyAllowed) 1 else 0) + (if (showBanner) 1 else 0) + (if (state.overdue.isNotEmpty()) 1 else 0) +
         (if (state.rows.isEmpty()) 1 else 0)
     // today opens scrolled to one hour before now; other days open at the top
     var scrolledFor by remember { mutableStateOf<LocalDate?>(null) }
@@ -174,6 +193,15 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                 bottom = padding.calculateBottomPadding() + if (asTab) 110.dp else 88.dp,
             ),
         ) {
+            if (!notifyAllowed) {
+                item {
+                    SlimBanner("Allow notifications for reminders", "Allow") {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
+            }
             if (showBanner) {
                 item { SlimBanner("New week: review last week", "Review") { nav.navigateTo(PlannerReviewScreen) } }
             }

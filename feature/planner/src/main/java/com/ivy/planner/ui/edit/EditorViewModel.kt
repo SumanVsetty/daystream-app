@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import com.ivy.planner.data.Library
 import com.ivy.planner.data.LibraryRepository
+import com.ivy.planner.data.PlannerPrefs
 import com.ivy.planner.data.PlannerRepository
 import com.ivy.planner.domain.AutoTime
 import com.ivy.planner.domain.CollectionType
@@ -54,6 +55,8 @@ data class EditorState(
     val photos: List<Pair<String, File>>,
     val pendingPhotos: List<Uri>,
     val library: Library?,
+    /** Minutes before (0 = at the time). */
+    val reminders: List<Int>,
 )
 
 sealed interface EditorEvent {
@@ -80,12 +83,14 @@ sealed interface EditorEvent {
     data class AddPhotos(val uris: List<Uri>) : EditorEvent
     data class RemovePhoto(val attachmentId: String) : EditorEvent
     data class RemovePendingPhoto(val uri: Uri) : EditorEvent
+    data class ToggleReminder(val minutesBefore: Int) : EditorEvent
 }
 
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     private val repository: PlannerRepository,
     private val library: LibraryRepository,
+    private val prefs: PlannerPrefs,
 ) : ComposeViewModel<EditorState, EditorEvent>() {
 
     private var loaded by mutableStateOf(false)
@@ -108,6 +113,8 @@ class EditorViewModel @Inject constructor(
     private var photos by mutableStateOf(listOf<Pair<String, File>>())
     private var pendingPhotos by mutableStateOf(listOf<Uri>())
     private var removedPhotos = setOf<String>()
+    private var reminders by mutableStateOf(listOf<Int>())
+    private var remindersTouched = false
 
     @Composable
     override fun uiState(): EditorState {
@@ -136,6 +143,7 @@ class EditorViewModel @Inject constructor(
         photos = photos,
         pendingPhotos = pendingPhotos,
         library = lib,
+        reminders = reminders,
     )
 
     override fun onEvent(event: EditorEvent) {
@@ -152,7 +160,13 @@ class EditorViewModel @Inject constructor(
                 // a new repeat starts from the chosen date
                 if (series == null) schedule = schedule?.copy(start = event.date)
             }
-            is EditorEvent.SetTime -> time = event.time
+            is EditorEvent.SetTime -> {
+                time = event.time
+                // a time you pick yourself gets the default reminder, unless you've set reminders already
+                if (event.time != null && !remindersTouched && reminders.isEmpty()) {
+                    prefs.defaultReminder?.let { reminders = listOf(it) }
+                }
+            }
             is EditorEvent.SetDuration -> duration = event.minutes
             is EditorEvent.SetRepeat -> schedule = event.schedule?.copy(start = if (series == null) date else event.schedule.start)
             EditorEvent.Save -> save()
@@ -187,6 +201,11 @@ class EditorViewModel @Inject constructor(
                 photos = photos.filterNot { it.first == event.attachmentId }
             }
             is EditorEvent.RemovePendingPhoto -> pendingPhotos = pendingPhotos - event.uri
+            is EditorEvent.ToggleReminder -> {
+                remindersTouched = true
+                reminders = if (event.minutesBefore in reminders) reminders - event.minutesBefore
+                else (reminders + event.minutesBefore).sorted()
+            }
             EditorEvent.Delete -> viewModelScope.launch {
                 entry?.let { repository.deleteEntry(it.id) }
                 series?.let { repository.deleteSeries(it.id) }
@@ -223,6 +242,7 @@ class EditorViewModel @Inject constructor(
             }
             val owner = event.entryId ?: event.seriesId
             if (owner != null) {
+                reminders = repository.reminders(owner).sorted()
                 val types = library.allCollections().associateBy { it.id }
                 val linked = library.collectionsOf(owner)
                 boardId = linked.firstOrNull { types[it]?.type == CollectionType.BOARD }
@@ -242,6 +262,7 @@ class EditorViewModel @Inject constructor(
     /** Board, collections, people, importance and photos, once the entry or series has an id. */
     private suspend fun applyExtras(ownerId: String, isEntry: Boolean) {
         library.setCollections(ownerId, collectionIds.toList() + listOfNotNull(boardId))
+        repository.setReminders(ownerId, if (kind == EntryKind.TASK || kind == EntryKind.EVENT) reminders else emptyList())
         if (!isEntry) return
         library.setPeople(ownerId, peopleIds.toList())
         repository.setImportance(ownerId, importance)
@@ -253,8 +274,11 @@ class EditorViewModel @Inject constructor(
         if (title.isBlank()) return
         val s = series
         if (s != null) {
-            // board changes apply straight away, even when nothing else changed
-            viewModelScope.launch { library.setCollections(s.id, collectionIds.toList() + listOfNotNull(boardId)) }
+            // board and reminder changes apply straight away, even when nothing else changed
+            viewModelScope.launch {
+                library.setCollections(s.id, collectionIds.toList() + listOfNotNull(boardId))
+                repository.setReminders(s.id, reminders)
+            }
             val changed = title != s.title || description != s.description || time != s.time ||
                 schedule != s.schedule || duration != (s.durationMinutes ?: AutoTime.DEFAULT_DURATION)
             if (!changed) {

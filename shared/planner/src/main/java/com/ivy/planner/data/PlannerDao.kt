@@ -42,6 +42,9 @@ interface EntryDao {
     @Query("SELECT * FROM entries WHERE date = :date")
     suspend fun onDate(date: Long): List<EntryEntity>
 
+    @Query("SELECT * FROM entries WHERE date BETWEEN :from AND :to")
+    suspend fun between(from: Long, to: Long): List<EntryEntity>
+
     @Query("SELECT * FROM entries")
     fun observeAll(): Flow<List<EntryEntity>>
 
@@ -212,4 +215,10 @@ interface ReminderDao {
 
     @Query("DELETE FROM reminders WHERE owner_id = :ownerId")
     suspend fun deleteForOwner(ownerId: String)
+
+    @Query("SELECT * FROM reminders")
+    suspend fun all(): List<ReminderEntity>
+
+    @Query("SELECT * FROM reminders")
+    fun observeAll(): Flow<List<ReminderEntity>>
 }
