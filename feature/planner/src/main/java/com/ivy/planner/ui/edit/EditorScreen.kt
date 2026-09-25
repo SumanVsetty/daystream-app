@@ -10,6 +10,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -101,7 +103,7 @@ fun PlannerEditScreenImpl(screen: PlannerEditScreen) {
     PlannerTheme { EditorUi(viewModel.uiState(), viewModel::onEvent) }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
     val nav = navigation()
@@ -175,56 +177,49 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Description (optional)") },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                minLines = 3,
+                minLines = 2,
                 shape = RoundedCornerShape(14.dp),
             )
 
-            FieldRow(Icons.Outlined.CalendarToday, "Date", state.date.withWeek(), enabled = !state.isOccurrence) {
-                pickDate = true
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    FieldRow(
-                        Icons.Outlined.Schedule,
-                        "Time",
-                        state.time?.label() ?: when (state.kind) {
-                            EntryKind.TASK -> "Auto · next free slot"
-                            EntryKind.EVENT -> "All day"
-                            else -> "Now"
-                        },
-                    ) { pickTime = true }
-                }
-                if (state.time != null) {
-                    TextButton(onClick = { onEvent(EditorEvent.SetTime(null)) }) { Text("Clear") }
-                }
-            }
-            if (state.kind == EntryKind.TASK || state.kind == EntryKind.EVENT) {
-                Box {
-                    FieldRow(Icons.Outlined.Timer, "Duration", durationLabel(state.durationMinutes)) { durationMenu = true }
-                    DropdownMenu(expanded = durationMenu, onDismissRequest = { durationMenu = false }) {
-                        listOf(15, 30, 45, 60, 90, 120).forEach { m ->
-                            DropdownMenuItem(
-                                text = { Text(durationLabel(m)) },
-                                onClick = {
-                                    durationMenu = false
-                                    onEvent(EditorEvent.SetDuration(m))
-                                },
-                            )
+            // settings as compact chips, like the add sheet
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                EditorChip(Icons.Outlined.CalendarToday, state.date.withWeek(), set = true, enabled = !state.isOccurrence) { pickDate = true }
+                EditorChip(
+                    Icons.Outlined.Schedule,
+                    state.time?.label() ?: when (state.kind) {
+                        EntryKind.TASK -> "Auto time"
+                        EntryKind.EVENT -> "All day"
+                        else -> "Now"
+                    },
+                    set = state.time != null,
+                    onClear = if (state.time != null) ({ onEvent(EditorEvent.SetTime(null)) }) else null,
+                ) { pickTime = true }
+                if (state.kind == EntryKind.TASK || state.kind == EntryKind.EVENT) {
+                    Box {
+                        EditorChip(Icons.Outlined.Timer, durationLabel(state.durationMinutes), set = true) { durationMenu = true }
+                        DropdownMenu(expanded = durationMenu, onDismissRequest = { durationMenu = false }) {
+                            listOf(15, 30, 45, 60, 90, 120).forEach { m ->
+                                DropdownMenuItem(
+                                    text = { Text(durationLabel(m)) },
+                                    onClick = {
+                                        durationMenu = false
+                                        onEvent(EditorEvent.SetDuration(m))
+                                    },
+                                )
+                            }
                         }
                     }
+                    EditorChip(Icons.Outlined.Repeat, if (state.schedule != null) state.repeatLabel else "Repeat", set = state.schedule != null) {
+                        repeatMenu = true
+                    }
+                    RemindersField(state, onEvent)
                 }
-            }
-            if (state.kind == EntryKind.TASK || state.kind == EntryKind.EVENT) {
-                FieldRow(Icons.Outlined.Repeat, "Repeat", state.repeatLabel, highlight = state.schedule != null) {
-                    repeatMenu = true
+                if (state.kind == EntryKind.TASK) {
+                    BoardField(state, onEvent)
                 }
-            }
-
-            if (state.kind == EntryKind.TASK || state.kind == EntryKind.EVENT) {
-                RemindersField(state, onEvent)
-            }
-            if (state.kind == EntryKind.TASK) {
-                BoardField(state, onEvent)
             }
             if (state.kind == EntryKind.TASK && !state.isOccurrence) {
                 ChecklistField(state, onEvent)
@@ -429,7 +424,7 @@ private fun BoardField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
     val boards = state.library?.collections.orEmpty().filter { it.type == CollectionType.BOARD }
     val current = boards.firstOrNull { it.id == state.boardId }
     Box {
-        FieldRow(Icons.Outlined.ViewKanban, "Board", current?.name ?: "None", highlight = current != null) { open = true }
+        EditorChip(Icons.Outlined.ViewKanban, current?.name ?: "Board", set = current != null) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("None") }, onClick = { open = false; onEvent(EditorEvent.SetBoard(null)) })
             boards.forEach { b ->
@@ -516,9 +511,13 @@ private fun Thumb(model: Any, onRemove: () -> Unit) {
 @Composable
 private fun RemindersField(state: EditorState, onEvent: (EditorEvent) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val summary = if (state.reminders.isEmpty()) "None" else state.reminders.sortedDescending().joinToString(", ") { ReminderPlanner.label(it) }
+    val summary = when (state.reminders.size) {
+        0 -> "Reminder"
+        1 -> ReminderPlanner.label(state.reminders.first())
+        else -> "${state.reminders.size} reminders"
+    }
     Box {
-        FieldRow(Icons.Outlined.Notifications, "Reminders", summary, highlight = state.reminders.isNotEmpty()) { open = true }
+        EditorChip(Icons.Outlined.Notifications, summary, set = state.reminders.isNotEmpty()) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             ReminderPlanner.CHOICES.forEach { m ->
                 DropdownMenuItem(
@@ -623,5 +622,44 @@ private fun FileChip(name: String, onOpen: () -> Unit, onRemove: () -> Unit) {
         Spacer(Modifier.width(10.dp))
         Text(name, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1)
         IconButton(onClick = onRemove) { Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+/** A compact setting: icon and value in a chip; "set" values are highlighted. [onClear] adds a small ✕. */
+@Composable
+private fun EditorChip(
+    icon: ImageVector,
+    label: String,
+    set: Boolean,
+    enabled: Boolean = true,
+    onClear: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(start = 10.dp, end = if (onClear != null) 2.dp else 12.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = if (set) PlannerColors.Accent else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            label,
+            fontSize = 14.sp,
+            fontWeight = if (set) FontWeight.Bold else FontWeight.Medium,
+            color = if (set) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
+        )
+        if (onClear != null) {
+            Text(
+                "✕",
+                modifier = Modifier.clickable(onClick = onClear).padding(horizontal = 8.dp),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

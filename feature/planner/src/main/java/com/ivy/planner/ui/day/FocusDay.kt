@@ -76,6 +76,7 @@ import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.WeekStrip
 import com.ivy.planner.ui.add.PlannerAddSheet
 import com.ivy.planner.ui.label
+import com.ivy.planner.ui.swipeDays
 import com.ivy.planner.ui.timelineColor
 import com.ivy.planner.ui.withWeek
 import java.time.format.TextStyle
@@ -161,7 +162,14 @@ internal fun FocusDayUi(
                     onNextWeek = { onEvent(DayEvent.SelectDate(state.date.plusWeeks(1))) },
                 )
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .swipeDays(
+                            key = state.date,
+                            onPrevious = { onEvent(DayEvent.SelectDate(state.date.minusDays(1))) },
+                            onNext = { onEvent(DayEvent.SelectDate(state.date.plusDays(1))) },
+                        ),
                     contentPadding = PaddingValues(top = 8.dp, bottom = padding.calculateBottomPadding() + if (asTab) 170.dp else 90.dp),
                 ) {
                     item { topBanners() }

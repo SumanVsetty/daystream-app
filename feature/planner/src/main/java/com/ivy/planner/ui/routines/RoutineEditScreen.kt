@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -157,6 +159,7 @@ fun PlannerRoutineEditScreenImpl(screen: PlannerRoutineEditScreen) {
     PlannerTheme { RoutineEditUi(vm) }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoutineEditUi(vm: RoutineEditViewModel) {
     val nav = navigation()
@@ -205,8 +208,8 @@ private fun RoutineEditUi(vm: RoutineEditViewModel) {
                 shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             )
-            // when
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // when: chips wrap onto the next line instead of squeezing
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Pill(vm.time?.label() ?: "Any time", false, { pickTime = true })
                 Pill(RepeatCodec.describe(vm.schedule), false, { repeatMenu = true })
                 if (vm.schedule.isOnce) {

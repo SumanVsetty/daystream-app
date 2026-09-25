@@ -573,6 +573,8 @@ fun Pill(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifi
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = if (selected) PlannerColors.OnAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
@@ -602,4 +604,22 @@ fun RoutineRing(done: Int, total: Int, size: Dp = 20.dp) {
             Icon(Icons.Filled.PlayArrow, contentDescription = "Routine", tint = PlannerColors.Routine, modifier = Modifier.size(size * 0.55f))
         }
     }
+}
+
+/**
+ * Swipe left for the next day, right for the previous one. Vertical scrolling is unaffected;
+ * a swipe needs a clear sideways movement to count.
+ */
+fun Modifier.swipeDays(key: Any, onPrevious: () -> Unit, onNext: () -> Unit): Modifier = pointerInput(key) {
+    var drag = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { drag = 0f },
+        onDragEnd = {
+            val threshold = 72.dp.toPx()
+            if (drag > threshold) onPrevious() else if (drag < -threshold) onNext()
+            drag = 0f
+        },
+        onDragCancel = { drag = 0f },
+        onHorizontalDrag = { _, amount -> drag += amount },
+    )
 }

@@ -85,6 +85,7 @@ import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.ShortDayFmt
 import com.ivy.planner.ui.WeekStrip
 import com.ivy.planner.ui.add.PlannerAddSheetHost
+import com.ivy.planner.ui.swipeDays
 import com.ivy.planner.ui.timelineColor
 import com.ivy.planner.ui.withWeek
 import java.time.LocalDate
@@ -227,7 +228,14 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
         if (listState.canScrollBackward) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .swipeDays(
+                    key = state.date,
+                    onPrevious = { onEvent(DayEvent.SelectDate(state.date.minusDays(1))) },
+                    onNext = { onEvent(DayEvent.SelectDate(state.date.plusDays(1))) },
+                ),
             contentPadding = PaddingValues(
                 top = 4.dp,
                 // leave room for the app's bottom bar in tab mode, or the FAB otherwise
