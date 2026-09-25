@@ -1,6 +1,7 @@
 package com.ivy.design.api.systems
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -138,25 +139,27 @@ abstract class IvyWalletDesign : IvyDesign {
                 override val isLight = true
             }
 
+            // Apeiro: the soft-black, softer-contrast palette shared with the planner.
+            // Accents are gentler than Ivy's but keep enough contrast for white text on buttons.
             Theme.DARK -> object : IvyColors {
-                override val pure = Black
-                override val pureInverse = White
-                override val gray = Gray
-                override val medium = MediumBlack
-                override val mediumInverse = MediumWhite
+                override val pure = Color(0xFF1B1D1B)
+                override val pureInverse = Color(0xFFE4E6E1)
+                override val gray = Color(0xFFA3A9A1)
+                override val medium = Color(0xFF2B302B)
+                override val mediumInverse = Color(0xFFD5D8D2)
 
-                override val primary = Purple
-                override val primary1 = IvyLight
+                override val primary = Color(0xFF7C6AE6)
+                override val primary1 = Color(0xFF2E2A45)
 
-                override val green = Green
-                override val green1 = GreenDark
+                override val green = Color(0xFF3FAF83)
+                override val green1 = Color(0xFF1F3A2C)
 
-                override val orange = Orange
-                override val orange1 = OrangeDark
+                override val orange = Color(0xFFE8955A)
+                override val orange1 = Color(0xFF3F2B1D)
 
-                override val red = Red
-                override val red1 = RedDark
-                override val red1Inverse = RedLight
+                override val red = Color(0xFFE56A78)
+                override val red1 = Color(0xFF402327)
+                override val red1Inverse = Color(0xFFF6C9CE)
 
                 override val isLight = false
             }

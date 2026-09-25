@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Apeiro line icon (24dp, 2dp stroke); tinted by the caller -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7,3h10a2,2 0,0 1,2 2v16l-3.5,-2 -3.5,2 -3.5,-2 -3.5,2v-16a2,2 0,0 1,2 -2zM9,8h6M9,12h6" />
+</vector>

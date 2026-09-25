@@ -129,7 +129,7 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
         ) {
             if (!state.isOccurrence) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(EntryKind.TASK, EntryKind.EVENT, EntryKind.NOTE).forEach { k ->
+                    listOf(EntryKind.TASK, EntryKind.EVENT, EntryKind.NOTE, EntryKind.JOURNAL).forEach { k ->
                         KindChip(k, selected = state.kind == k) { onEvent(EditorEvent.SetKind(k)) }
                     }
                 }

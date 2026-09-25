@@ -141,6 +141,8 @@ class PlannerRepository @Inject constructor(
 
     suspend fun getEntry(id: String): Entry? = entryDao.findById(id)?.toDomain()
 
+    fun observeJournal(): Flow<List<Entry>> = entryDao.observeJournal().map { list -> list.map { it.toDomain() } }
+
     suspend fun saveEntry(entry: Entry) {
         val existing = entryDao.findById(entry.id)
         val week = entry.date?.isoWeek() ?: entry.week

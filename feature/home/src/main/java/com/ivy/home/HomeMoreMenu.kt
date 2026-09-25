@@ -51,6 +51,7 @@ import com.ivy.design.l0_system.UI
 import com.ivy.design.l0_system.style
 import com.ivy.design.utils.thenIf
 import com.ivy.legacy.Constants
+import com.ivy.legacy.data.model.MainTab
 import com.ivy.legacy.ivyWalletCtx
 import com.ivy.legacy.rootScreen
 import com.ivy.legacy.utils.clickableNoIndication
@@ -403,6 +404,7 @@ private fun QuickAccess(
 ) {
     Column {
         val nav = navigation()
+        val ivyCtx = ivyWalletCtx()
 
         Text(
             modifier = Modifier.padding(start = 24.dp),
@@ -495,6 +497,15 @@ private fun QuickAccess(
 //        ) {
 //            ivyContext.navigateTo(Screen.Charts)
 //        }
+
+            MoreMenuButton(
+                icon = R.drawable.ic_apeiro_bank,
+                label = "Accounts"
+            ) {
+                ivyCtx.selectMainTab(MainTab.ACCOUNTS)
+            }
+
+            Spacer(Modifier.weight(1f))
 
             MoreMenuButton(
                 icon = R.drawable.home_more_menu_reports,

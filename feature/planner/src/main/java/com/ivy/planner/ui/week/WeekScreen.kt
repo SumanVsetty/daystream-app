@@ -1,6 +1,7 @@
 package com.ivy.planner.ui.week
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,13 +13,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +62,7 @@ import com.ivy.navigation.PlannerWeekScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.planner.domain.Entry
+import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
 import com.ivy.planner.domain.IsoWeek
 import com.ivy.planner.ui.CheckCircle
@@ -186,13 +195,7 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
                         )
                     }
                     day.lines.forEach { line ->
-                        Text(
-                            "${line.symbol}  ${line.title}",
-                            fontSize = 14.sp,
-                            color = if (line.state == EntryState.OPEN) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                            textDecoration = if (line.state == EntryState.DONE) TextDecoration.LineThrough else null,
-                        )
+                        WeekLine(line) { onEvent(WeekEvent.ToggleLine(line)) }
                     }
                     day.spend?.let {
                         Text(it, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = PlannerColors.Accent)
@@ -235,3 +238,51 @@ private fun WeekTaskRow(task: Entry, state: WeekState, onEvent: (WeekEvent) -> U
     }
 }
 
+
+/** One line in a Week day: the same icons as the Day tab, smaller; tasks can be ticked here. */
+@Composable
+private fun WeekLine(line: WeekDayLine, onToggle: () -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val finished = line.state == EntryState.DONE || line.state == EntryState.MISSED || line.state == EntryState.SKIPPED
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 1.dp)) {
+        Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+            when (line.kind) {
+                EntryKind.TASK -> Box(
+                    Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .then(
+                            if (line.state == EntryState.DONE) Modifier.background(PlannerColors.Done)
+                            else Modifier.border(1.5.dp, if (line.state == EntryState.MISSED) PlannerColors.Missed else PlannerColors.Done, CircleShape),
+                        )
+                        .clickable(onClick = onToggle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (line.state == EntryState.DONE) {
+                        Icon(Icons.Filled.Check, contentDescription = "Done", tint = PlannerColors.OnDone, modifier = Modifier.size(12.dp))
+                    }
+                }
+                EntryKind.EVENT -> Icon(Icons.Outlined.CalendarToday, contentDescription = "Event", tint = PlannerColors.Event, modifier = Modifier.size(16.dp))
+                EntryKind.JOURNAL -> Icon(Icons.Filled.Star, contentDescription = "Journal", tint = PlannerColors.Journal, modifier = Modifier.size(16.dp))
+                EntryKind.NOTE -> Box(Modifier.size(7.dp).clip(CircleShape).background(PlannerColors.Done))
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        line.time?.let {
+            Text(it, fontSize = 13.sp, color = muted, modifier = Modifier.padding(end = 8.dp))
+        }
+        Text(
+            line.title,
+            fontSize = 14.sp,
+            color = if (finished) muted else MaterialTheme.colorScheme.onSurface,
+            textDecoration = if (line.state == EntryState.DONE) TextDecoration.LineThrough else null,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (line.repeating) {
+            Icon(Icons.Outlined.Repeat, contentDescription = "Repeats", tint = muted, modifier = Modifier.padding(start = 6.dp).size(13.dp))
+        }
+        if (line.moved) {
+            Text("moved", fontSize = 12.sp, color = PlannerColors.Accent, modifier = Modifier.padding(start = 6.dp))
+        }
+    }
+}

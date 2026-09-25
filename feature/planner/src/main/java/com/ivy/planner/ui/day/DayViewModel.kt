@@ -55,6 +55,8 @@ data class DayRow(
     val seriesId: String?,
     val date: LocalDate,
     val time: LocalTime?,
+    /** Planned length in minutes (null = default). */
+    val durationMinutes: Int? = null,
     /** Expense or income from the money side (read-only here). */
     val money: MoneyItem? = null,
     /** Softened: before "now" today and nothing left to do. */
@@ -121,9 +123,7 @@ class DayViewModel @Inject constructor(
             .sortedWith(compareBy<DayRow>({ it.time != null }, { it.time }, { it.title.lowercase() }))
         val isToday = date == today
         val visible = if (todoOnly) allRows.filter { it.isToDo(isToday, now) } else allRows
-        val rows = visible.map { row ->
-            row.copy(dimmed = isToday && row.time != null && row.time < now && !row.isOpenTask())
-        }
+        val rows = visible.map { row -> row.copy(dimmed = row.shouldSoften(isToday, now)) }
         val open = allRows.count { it.isOpenTask() }
         val done = allRows.count { it.state == EntryState.DONE }
         val nowIndex = if (isToday) rows.indexOfFirst { it.time != null && it.time >= now }.let { if (it < 0) rows.size else it } else null
@@ -147,11 +147,30 @@ class DayViewModel @Inject constructor(
     private fun DayRow.isOpenTask() =
         money == null && kind == EntryKind.TASK && state == EntryState.OPEN
 
-    /** "To do": open tasks, and events still ahead (or all-day). */
+    /** When an event ends (events default to an hour). Null for all-day events. */
+    private fun DayRow.eventEnd(): LocalTime? {
+        val start = time ?: return null
+        val end = start.plusMinutes((durationMinutes ?: 60).toLong())
+        return if (end < start) LocalTime.MAX else end // runs past midnight
+    }
+
+    /**
+     * Softening combines status and time:
+     * done / missed / skipped tasks always; today, notes and expenses before now,
+     * and timed events once they've ended. Open tasks and all-day events never.
+     */
+    private fun DayRow.shouldSoften(isToday: Boolean, now: LocalTime): Boolean = when {
+        money != null -> isToday && time != null && time < now
+        kind == EntryKind.TASK -> state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
+        kind == EntryKind.EVENT -> isToday && eventEnd()?.let { it <= now } ?: false
+        else -> isToday && (time == null || time < now) // notes and journal: records of the past
+    }
+
+    /** "To do": open tasks, and events that haven't ended (all-day events all day). */
     private fun DayRow.isToDo(isToday: Boolean, now: LocalTime): Boolean = when {
         money != null -> false
         kind == EntryKind.TASK -> state == EntryState.OPEN
-        kind == EntryKind.EVENT -> !isToday || time == null || time >= now
+        kind == EntryKind.EVENT -> !isToday || eventEnd()?.let { it > now } ?: true
         else -> false
     }
 
@@ -193,6 +212,7 @@ class DayViewModel @Inject constructor(
             seriesId = null,
             date = entry.date ?: today,
             time = entry.time,
+            durationMinutes = entry.durationMinutes,
         )
         is DayItem.Occurrence -> {
             val consistency = Planner.consistency(series, s.records[series.id].orEmpty(), today)
@@ -215,6 +235,7 @@ class DayViewModel @Inject constructor(
                 seriesId = series.id,
                 date = date,
                 time = sortTime,
+                durationMinutes = series.durationMinutes,
             )
         }
     }
@@ -242,7 +263,7 @@ class DayViewModel @Inject constructor(
             }
             is DayEvent.Toggle -> viewModelScope.launch {
                 val row = event.row
-                if (row.money != null) return@launch
+                if (row.money != null || row.kind != EntryKind.TASK) return@launch
                 val newState = if (row.state == EntryState.DONE) EntryState.OPEN else EntryState.DONE
                 if (row.entryId != null) {
                     repository.setState(row.entryId, newState)

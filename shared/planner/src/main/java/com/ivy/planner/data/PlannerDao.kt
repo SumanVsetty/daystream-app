@@ -41,6 +41,10 @@ interface EntryDao {
 
     @Query("SELECT * FROM entries WHERE date = :date")
     suspend fun onDate(date: Long): List<EntryEntity>
+
+    /** Journal entries and notes, newest first. */
+    @Query("SELECT * FROM entries WHERE kind IN ('JOURNAL', 'NOTE') ORDER BY date DESC, time_minutes DESC, created_at DESC")
+    fun observeJournal(): Flow<List<EntryEntity>>
 }
 
 @Dao

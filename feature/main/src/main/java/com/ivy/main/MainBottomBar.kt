@@ -128,7 +128,7 @@ fun BoxWithConstraintsScope.BottomBar(
         animationSpec = springBounceFast()
     )
 
-    val plannerTab = tab == MainTab.DAY || tab == MainTab.WEEK
+    val plannerTab = tab == MainTab.DAY || tab == MainTab.WEEK || tab == MainTab.JOURNAL
     val barBackground = when {
         !plannerTab -> pureBlur()
         UI.colors.isLight -> Color(0xF2F7F6F2)
@@ -147,7 +147,7 @@ fun BoxWithConstraintsScope.BottomBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Tab(
-            icon = R.drawable.ic_vue_main_calendar,
+            icon = R.drawable.ic_apeiro_day,
             name = "Day",
             selected = tab == MainTab.DAY,
             selectedColor = PlannerAccent
@@ -156,7 +156,7 @@ fun BoxWithConstraintsScope.BottomBar(
         }
 
         Tab(
-            icon = R.drawable.ic_calendar,
+            icon = R.drawable.ic_apeiro_week,
             name = "Week",
             selected = tab == MainTab.WEEK,
             selectedColor = PlannerAccent
@@ -167,21 +167,22 @@ fun BoxWithConstraintsScope.BottomBar(
         Spacer(Modifier.width(FAB_BUTTON_SIZE))
 
         Tab(
-            icon = R.drawable.ic_home,
-            name = "Money",
-            selected = tab == MainTab.HOME,
-            selectedColor = Ivy
+            icon = R.drawable.ic_apeiro_journal,
+            name = "Journal",
+            selected = tab == MainTab.JOURNAL,
+            selectedColor = PlannerAccent
         ) {
-            selectTab(MainTab.HOME)
+            selectTab(MainTab.JOURNAL)
         }
 
+        // Accounts lives in Money's "more" menu; Money stays highlighted while it's open
         Tab(
-            icon = R.drawable.ic_accounts,
-            name = stringResource(R.string.accounts),
-            selected = tab == MainTab.ACCOUNTS,
-            selectedColor = Green
+            icon = R.drawable.ic_apeiro_wallet,
+            name = "Money",
+            selected = tab == MainTab.HOME || tab == MainTab.ACCOUNTS,
+            selectedColor = PlannerAccent
         ) {
-            selectTab(MainTab.ACCOUNTS)
+            selectTab(MainTab.HOME)
         }
     }
 
@@ -221,7 +222,7 @@ fun BoxWithConstraintsScope.BottomBar(
     // Apeiro logo (home, collapsed) / + / x button
     val isPlannerTab = tab == MainTab.DAY || tab == MainTab.WEEK
     if (!isPlannerTab) plannerMenu = false
-    val showLogo = (tab == MainTab.HOME || isPlannerTab) && !expanded && !plannerMenu
+    val showLogo = (tab == MainTab.HOME || tab == MainTab.JOURNAL || isPlannerTab) && !expanded && !plannerMenu
     val logoBorderColor = UI.colors.medium
     IvyCircleButton(
         modifier = Modifier
@@ -286,6 +287,7 @@ fun BoxWithConstraintsScope.BottomBar(
         icon = if (showLogo) R.drawable.ic_apeiro_logo else R.drawable.ic_add,
         backgroundGradient = when (tab) {
             MainTab.DAY, MainTab.WEEK -> if (plannerMenu) Gradient.solid(UI.colors.gray) else Gradient.solid(White)
+            MainTab.JOURNAL -> Gradient.solid(White)
             MainTab.HOME -> {
                 if (!expanded) Gradient.solid(White) else Gradient.solid(UI.colors.gray)
             }
@@ -299,6 +301,7 @@ fun BoxWithConstraintsScope.BottomBar(
     ) {
         when (tab) {
             MainTab.DAY, MainTab.WEEK -> plannerMenu = !plannerMenu
+            MainTab.JOURNAL -> onAddPlannerEntry("JOURNAL")
             MainTab.HOME -> {
                 expanded = !expanded
             }

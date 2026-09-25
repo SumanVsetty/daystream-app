@@ -34,7 +34,17 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 
 @Immutable
-data class WeekDayLine(val symbol: String, val title: String, val state: EntryState, val kind: EntryKind)
+data class WeekDayLine(
+    val title: String,
+    val time: String?,
+    val state: EntryState,
+    val kind: EntryKind,
+    val moved: Boolean,
+    val repeating: Boolean,
+    val entryId: String?,
+    val seriesId: String?,
+    val date: LocalDate,
+)
 
 @Immutable
 data class WeekDaySummary(
@@ -60,6 +70,7 @@ sealed interface WeekEvent {
     data class AddWeekTask(val title: String) : WeekEvent
     data class AssignToDay(val id: String, val date: LocalDate) : WeekEvent
     data class ToggleWeekTask(val entry: Entry) : WeekEvent
+    data class ToggleLine(val line: WeekDayLine) : WeekEvent
     data object ToggleFilter : WeekEvent
     data object Refresh : WeekEvent
 }
@@ -114,21 +125,29 @@ class WeekViewModel @Inject constructor(
         )
     }
 
-    private fun DayItem.toLine(): WeekDayLine {
-        val (kind, state) = when (this) {
-            is DayItem.Single -> entry.kind to entry.state
-            is DayItem.Occurrence -> series.kind to state
-        }
-        val symbol = when {
-            kind == EntryKind.EVENT -> "○"
-            kind == EntryKind.NOTE || kind == EntryKind.JOURNAL -> "–"
-            state == EntryState.DONE -> "×"
-            state == EntryState.MISSED -> "·"
-            this is DayItem.Single && entry.migrationCount > 0 -> ">"
-            else -> "•"
-        }
-        val time = sortTime?.label()
-        return WeekDayLine(symbol, if (time != null) "$time  $title" else title, state, kind)
+    private fun DayItem.toLine(): WeekDayLine = when (this) {
+        is DayItem.Single -> WeekDayLine(
+            title = title,
+            time = sortTime?.label(),
+            state = entry.state,
+            kind = entry.kind,
+            moved = entry.migrationCount > 0,
+            repeating = false,
+            entryId = entry.id,
+            seriesId = null,
+            date = entry.date ?: LocalDate.now(),
+        )
+        is DayItem.Occurrence -> WeekDayLine(
+            title = title,
+            time = sortTime?.label(),
+            state = state,
+            kind = series.kind,
+            moved = false,
+            repeating = true,
+            entryId = null,
+            seriesId = series.id,
+            date = date,
+        )
     }
 
     override fun onEvent(event: WeekEvent) {
@@ -142,6 +161,16 @@ class WeekViewModel @Inject constructor(
                     repository.quickAdd(parsed.kind, parsed.title, parsed.date, time = parsed.time, durationMinutes = parsed.durationMinutes)
                 } else {
                     repository.quickAdd(parsed.kind, parsed.title, date = null, week = week, durationMinutes = parsed.durationMinutes)
+                }
+            }
+            is WeekEvent.ToggleLine -> viewModelScope.launch {
+                val line = event.line
+                if (line.kind != EntryKind.TASK) return@launch
+                val newState = if (line.state == EntryState.DONE) EntryState.OPEN else EntryState.DONE
+                if (line.entryId != null) {
+                    repository.setState(line.entryId, newState)
+                } else if (line.seriesId != null) {
+                    repository.setOccurrenceState(line.seriesId, line.date, newState)
                 }
             }
             WeekEvent.ToggleFilter -> {

@@ -20,6 +20,9 @@ object PlannerColors {
     val OnDone = Color(0xFF0F2A18)
     /** Pastel blue, for events. */
     val Event = Color(0xFF9DBBEF)
+    /** Pastel butter, for journal entries (until importance colours arrive). */
+    val Journal = Color(0xFFF2D38C)
+    val Routine = Color(0xFFC3B1EC)
     /** Soft grey, for missed and skipped. */
     val Missed = Color(0xFF8C918B)
 }

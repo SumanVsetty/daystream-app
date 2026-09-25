@@ -25,6 +25,7 @@ import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.navigation
 import com.ivy.planner.ui.PlannerSelection
 import com.ivy.planner.ui.day.PlannerDayTab
+import com.ivy.planner.ui.journal.PlannerJournalTab
 import com.ivy.planner.ui.week.PlannerWeekTab
 import com.ivy.wallet.domain.deprecated.logic.model.CreateAccountData
 import com.ivy.wallet.ui.theme.modal.edit.AccountModal
@@ -67,6 +68,7 @@ private fun BoxWithConstraintsScope.UI(
     when (tab) {
         MainTab.DAY -> PlannerDayTab()
         MainTab.WEEK -> PlannerWeekTab()
+        MainTab.JOURNAL -> PlannerJournalTab()
         MainTab.HOME -> HomeTab()
         MainTab.ACCOUNTS -> AccountsTab()
     }

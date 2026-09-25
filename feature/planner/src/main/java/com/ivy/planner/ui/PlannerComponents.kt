@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.CalendarToday
@@ -111,8 +112,11 @@ fun EntryLeading(kind: EntryKind, state: EntryState, onToggle: () -> Unit) {
         EntryKind.EVENT -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             Icon(Icons.Outlined.CalendarToday, contentDescription = "Event", tint = PlannerColors.Event, modifier = Modifier.size(20.dp))
         }
-        EntryKind.NOTE, EntryKind.JOURNAL -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        EntryKind.NOTE -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.size(9.dp).clip(CircleShape).background(PlannerColors.Done))
+        }
+        EntryKind.JOURNAL -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Star, contentDescription = "Journal", tint = PlannerColors.Journal, modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -122,7 +126,8 @@ fun EntryLeading(kind: EntryKind, state: EntryState, onToggle: () -> Unit) {
 fun timelineColor(kind: EntryKind, state: EntryState, isMoney: Boolean = false): Color = when {
     isMoney -> PlannerColors.Accent
     kind == EntryKind.EVENT -> PlannerColors.Event
-    kind == EntryKind.NOTE || kind == EntryKind.JOURNAL -> MaterialTheme.colorScheme.outlineVariant
+    kind == EntryKind.JOURNAL -> PlannerColors.Journal
+    kind == EntryKind.NOTE -> MaterialTheme.colorScheme.outlineVariant
     state == EntryState.MISSED || state == EntryState.SKIPPED -> MaterialTheme.colorScheme.outlineVariant
     else -> PlannerColors.Done
 }
