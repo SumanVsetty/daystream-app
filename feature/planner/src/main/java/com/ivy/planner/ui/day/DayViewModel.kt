@@ -79,6 +79,8 @@ data class DayRow(
     val focused: Boolean = false,
     /** Left over from an earlier day where it was one of that day's 3. */
     val wasFocused: Boolean = false,
+    /** Its time has passed (or it's from an earlier day) and it's still open: the time shows in orange. */
+    val late: Boolean = false,
     val checklist: List<com.ivy.planner.domain.ChecklistItem> = emptyList(),
     /** For routines: steps done and total today. */
     val routine: Pair<Int, Int>? = null,
@@ -115,10 +117,8 @@ data class FocusDay(
     /** Asks which star to swap out when a fourth is added. */
     val swapIn: DayRow? = null,
     val notice: String? = null,
-    /** Open tasks from earlier today (and earlier days), latest problems first. */
-    val stillOpen: List<DayRow> = emptyList(),
-    val nextUp: DayRow? = null,
-    val nextUpCountdown: String = "",
+    /** Something logged in the last few minutes, shown on the folded Earlier card. */
+    val justLogged: DayRow? = null,
     val later: List<LaterItem> = emptyList(),
     val earlier: List<DayRow> = emptyList(),
     /** "3 done · 2 expenses · 1 note · 1 memory" */
@@ -254,30 +254,39 @@ class DayViewModel @Inject constructor(
             val later = if (date.isAfter(today)) withFreeTime(rows, LocalTime.of(8, 0)) else rows.map { LaterItem.Row(it) }
             return FocusDay(three = three, later = later, done = done, total = tasks.size, spent = spent, isToday = false)
         }
-        val stillOpen = rows.filter { it.isOpenTaskLike() && it.time != null && it.time < now } +
-            overdue.map { e ->
-                DayRow(
-                    key = "o:${e.id}", kind = e.kind, title = e.title, description = e.description,
-                    meta = if (e.migrationCount > 0) "moved ${e.migrationCount}×" else "",
-                    state = e.state, repeating = false, entryId = e.id, seriesId = null,
-                    date = e.date ?: date, time = e.time,
-                    timeLabel = e.date?.let { "from " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) } ?: "",
-                    wasFocused = e.date?.let { "${e.id}@$it" in stars } ?: false,
-                )
-            }
-        // no separate Next up: the importance is carried by today's 3
-        val nextUp: DayRow? = null
+        // leftovers from earlier days go first, marked "from Wed"
+        val leftovers = overdue.map { e ->
+            val wasStar = e.date?.let { "${e.id}@$it" in stars } ?: false
+            DayRow(
+                key = "o:${e.id}", kind = e.kind, title = e.title, description = e.description,
+                meta = listOfNotNull(
+                    if (wasStar) "★ one of ${e.date?.dayOfWeek?.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)}'s 3" else null,
+                    if (e.migrationCount > 0) "moved ${e.migrationCount}×" else null,
+                ).joinToString(" · "),
+                state = e.state, repeating = false, entryId = e.id, seriesId = null,
+                date = e.date ?: date, time = e.time,
+                timeLabel = e.date?.let { "from " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) } ?: "",
+                wasFocused = wasStar,
+                late = true,
+            )
+        }
+        // "Today": everything still ahead of you, in time order; late tasks keep their place, in orange
+        fun ahead(r: DayRow): Boolean = r.money == null && when {
+            r.isOpenTaskLike() -> true
+            r.kind == EntryKind.EVENT -> r.state != EntryState.DONE && (r.eventEnd()?.let { it > now } ?: true)
+            else -> r.state != EntryState.DONE && r.time != null && r.time > now // e.g. a note planned for later
+        }
+        val todayRows = rows.filter { ahead(it) }.map { r ->
+            if (r.isOpenTaskLike() && r.time != null && r.time < now) r.copy(late = true) else r
+        }
+        val earlier = rows.filterNot { ahead(it) }
         // just logged: from the last few minutes, or added in the last few minutes (whatever its time)
         val graceFrom = now.minusMinutes(GRACE_MINUTES)
         val addedSince = System.currentTimeMillis() - GRACE_MINUTES * 60_000
-        fun justLogged(r: DayRow) = r.state != EntryState.DONE && !r.isOpenTaskLike() &&
-            ((r.time != null && r.time >= graceFrom && graceFrom < now) || (r.createdAt > 0 && r.createdAt >= addedSince))
-        val laterRows = rows.filter { r ->
-            r.key != nextUp?.key && r !in stillOpen && r.state != EntryState.DONE &&
-                (r.time == null && r.kind == EntryKind.EVENT || (r.time != null && r.time >= now) || justLogged(r))
-        }
-        val from = now
-        val earlier = rows.filter { r -> r.key != nextUp?.key && r !in stillOpen && r !in laterRows }
+        val justLogged = earlier.filter { r ->
+            r.kind != EntryKind.TASK &&
+                ((r.time != null && r.time >= graceFrom && graceFrom < now) || (r.createdAt > 0 && r.createdAt >= addedSince))
+        }.maxByOrNull { it.createdAt }
         val summary = listOfNotNull(
             earlier.count { it.money == null && it.kind == EntryKind.TASK && it.state == EntryState.DONE }.takeIf { it > 0 }?.let { "$it done" },
             earlier.count { it.money?.isIncome == false }.takeIf { it > 0 }?.let { if (it == 1) "1 expense" else "$it expenses" },
@@ -287,12 +296,10 @@ class DayViewModel @Inject constructor(
         ).joinToString(" · ")
         return FocusDay(
             three = three,
-            stillOpen = stillOpen,
-            nextUp = nextUp,
-            nextUpCountdown = nextUp?.time?.let { FreeTime.countdown(now, it) } ?: "",
-            later = withFreeTime(laterRows, from),
+            later = leftovers.map { LaterItem.Row(it) } + withFreeTime(todayRows, now),
             earlier = earlier,
             earlierSummary = summary,
+            justLogged = justLogged,
             done = done,
             total = tasks.size,
             spent = spent,

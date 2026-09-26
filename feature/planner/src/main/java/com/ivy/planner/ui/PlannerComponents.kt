@@ -196,6 +196,8 @@ fun EntryRow(
     routine: Pair<Int, Int>? = null,
     /** Long-press, e.g. for "Add to today's 3". */
     onLongClick: (() -> Unit)? = null,
+    /** Colour of the time, e.g. orange when a task is late. */
+    timeColor: Color? = null,
 ) {
     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -212,7 +214,7 @@ fun EntryRow(
             text = timeLabel,
             modifier = Modifier.width(timeColumnWidth()).padding(top = 5.dp),
             style = TimeStyle,
-            color = muted,
+            color = timeColor ?: muted,
             textAlign = TextAlign.End,
             maxLines = 1,
             softWrap = false,

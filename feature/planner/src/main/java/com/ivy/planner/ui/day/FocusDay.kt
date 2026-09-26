@@ -201,41 +201,13 @@ internal fun FocusDayUi(
                     f.notice?.let { n ->
                         item { Text(n, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), fontSize = 13.sp, color = PlannerColors.Accent) }
                     }
-                    // still open: late today, and left from earlier days
-                    if (f.stillOpen.isNotEmpty()) {
-                        item {
-                            val shown = if (allOpen) f.stillOpen else f.stillOpen.take(2)
-                            Column(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(start = 4.dp, end = 10.dp, top = 10.dp, bottom = 6.dp),
-                            ) {
-                                Row(Modifier.fillMaxWidth().padding(start = 12.dp, bottom = 2.dp)) {
-                                    SectionLabel("Still open · ${f.stillOpen.size}")
-                                    Spacer(Modifier.weight(1f))
-                                    if (f.stillOpen.size > 2) {
-                                        Text(
-                                            if (allOpen) "Show less" else "+${f.stillOpen.size - 2} more",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.clickable { allOpen = !allOpen },
-                                        )
-                                    }
-                                }
-                                shown.forEach { row -> StillOpenRow(row, nav, onEvent) }
-                            }
-                        }
-                    }
                     // later today (or the whole day for other days)
                     if (f.later.isNotEmpty()) {
                         item {
                             Box(Modifier.padding(start = 20.dp, top = 12.dp, bottom = 2.dp)) {
                                 SectionLabel(
                                     when {
-                                        f.isToday -> "Later today"
+                                        f.isToday -> "Today"
                                         state.date.isAfter(state.today) -> "Planned"
                                         else -> "The day"
                                     },
@@ -269,7 +241,13 @@ internal fun FocusDayUi(
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     SectionLabel("Earlier today", MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (!earlierOpen && f.earlierSummary.isNotBlank()) Text(f.earlierSummary, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+                                    val just = f.justLogged
+                                    if (!earlierOpen && just != null) {
+                                        // reassurance that what you just logged was saved
+                                        Text("Just logged · ${just.title}", fontSize = 13.sp, color = PlannerColors.Accent, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
+                                    } else if (!earlierOpen && f.earlierSummary.isNotBlank()) {
+                                        Text(f.earlierSummary, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+                                    }
                                 }
                                 Icon(if (earlierOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, if (earlierOpen) "Fold" else "Unfold", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -278,7 +256,7 @@ internal fun FocusDayUi(
                             itemsIndexed(f.earlier, key = { _, r -> "e:" + r.key }) { i, row -> DayEntryRow(row, f.earlier, i, nav, onEvent) }
                         }
                     }
-                    if (f.three.isEmpty() && f.stillOpen.isEmpty() && f.later.isEmpty() && f.earlier.isEmpty()) {
+                    if (f.three.isEmpty() && f.later.isEmpty() && f.earlier.isEmpty()) {
                         item {
                             Text(
                                 "Nothing planned. Tap below to log something.",
@@ -341,56 +319,6 @@ private fun Action(label: String, color: Color?, onClick: () -> Unit) {
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun StillOpenRow(row: DayRow, nav: Navigation, onEvent: (DayEvent) -> Unit) {
-    var menu by remember { mutableStateOf(false) }
-    Box {
-        RowMenu(row, menu, onDismiss = { menu = false }, nav = nav, onEvent = onEvent)
-    Row(Modifier.fillMaxWidth().combinedClickable(onClick = { openRow(nav, row) }, onLongClick = { menu = true }).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            row.timeLabel,
-            modifier = Modifier.width(52.dp),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = PlannerColors.Accent,
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-            maxLines = 1,
-        )
-        Spacer(Modifier.width(4.dp))
-        if (row.routine != null) {
-            com.ivy.planner.ui.RoutineRing(row.routine.first, row.routine.second)
-        } else {
-            CheckCircle(checked = false, onToggle = { onEvent(DayEvent.Toggle(row)) })
-        }
-        Column(Modifier.weight(1f).padding(start = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (row.wasFocused) {
-                    // it was one of that day's 3
-                    Icon(Icons.Filled.Star, contentDescription = "Was one of the day's 3", tint = PlannerColors.Journal, modifier = Modifier.size(13.dp).padding(end = 3.dp))
-                }
-                Text(row.title, fontSize = 15.sp, maxLines = 2)
-            }
-            val sub = listOf(row.meta).filter { it.isNotBlank() } + row.tags.map { "● " + it.name }
-            if (sub.isNotEmpty()) Text(sub.joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
-        Text(
-            "Later",
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).clickable { onEvent(DayEvent.Later(row)) }.padding(horizontal = 10.dp, vertical = 6.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            "Tmrw",
-            modifier = Modifier.clickable { onEvent(DayEvent.Tomorrow(row)) }.padding(horizontal = 8.dp, vertical = 6.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    }
-}
-
 @Composable
 private fun FreeLine(label: String) {
     Row(Modifier.fillMaxWidth().padding(start = 76.dp, end = 20.dp, top = 2.dp, bottom = 6.dp)) {
@@ -425,6 +353,7 @@ private fun DayEntryRow(row: DayRow, rows: List<DayRow>, i: Int, nav: Navigation
             trailing = row.trailing,
             routine = row.routine,
             onLongClick = if (row.money == null && row.kind == EntryKind.TASK) ({ menu = true }) else null,
+            timeColor = if (row.late) PlannerColors.Accent else null,
         )
     }
 }
