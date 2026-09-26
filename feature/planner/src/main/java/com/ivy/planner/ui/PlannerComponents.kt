@@ -270,7 +270,7 @@ fun EntryRow(
             }
             if (description.isNotBlank()) {
                 Text(
-                    text = description,
+                    text = remember(description) { com.ivy.planner.domain.Markdown.plain(description) },
                     fontSize = 13.sp,
                     lineHeight = 17.sp,
                     color = muted,

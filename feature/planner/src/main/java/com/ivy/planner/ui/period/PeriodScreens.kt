@@ -435,7 +435,7 @@ private fun MomentCard(e: Entry, lib: com.ivy.planner.data.Library, vm: PeriodVi
             .width(230.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { nav.navigateTo(PlannerEditScreen(entryId = e.id, epochDay = e.date?.toEpochDay(), kind = e.kind.name)) },
+            .clickable { nav.navigateTo(com.ivy.navigation.PlannerEntryViewScreen(e.id)) },
     ) {
         if (photo != null) {
             AsyncImage(model = photo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(110.dp))

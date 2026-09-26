@@ -199,3 +199,6 @@ data class PlannerYearScreen(val year: Int? = null) : Screen
 
 /** Automatic backups: folder and frequency. */
 data object PlannerAutoBackupScreen : Screen
+
+/** Reading a journal entry or note; Edit opens the editor. */
+data class PlannerEntryViewScreen(val entryId: String) : Screen

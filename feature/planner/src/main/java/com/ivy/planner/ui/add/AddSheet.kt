@@ -71,6 +71,7 @@ import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
 import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.PlannerTimePicker
+import com.ivy.planner.ui.RichTextField
 import com.ivy.planner.ui.edit.CustomRepeatDialog
 import com.ivy.planner.ui.edit.RepeatMenu
 import com.ivy.planner.ui.importanceColor
@@ -211,15 +212,7 @@ private fun AddSheet(vm: AddSheetViewModel, onClose: () -> Unit) {
                 )
             }
             if (vm.showDetails) {
-                OutlinedTextField(
-                    value = vm.description,
-                    onValueChange = { vm.description = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Details") },
-                    minLines = 2,
-                    shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                )
+                RichTextField(value = vm.description, onValueChange = { vm.description = it }, placeholder = "Details")
             } else {
                 Text("+ Details", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { vm.showDetails = true })
             }

@@ -98,6 +98,8 @@ internal fun openRow(nav: Navigation, row: DayRow) {
     val routineId = row.seriesId
     when {
         row.routine != null && routineId != null -> nav.navigateTo(PlannerRoutineScreen(routineId, row.date.toEpochDay()))
+        m == null && row.entryId != null && (row.kind == EntryKind.JOURNAL || row.kind == EntryKind.NOTE) ->
+            nav.navigateTo(com.ivy.navigation.PlannerEntryViewScreen(row.entryId))
         m != null -> nav.navigateTo(
             EditTransactionScreen(initialTransactionId = m.id, type = if (m.isIncome) TransactionType.INCOME else TransactionType.EXPENSE),
         )

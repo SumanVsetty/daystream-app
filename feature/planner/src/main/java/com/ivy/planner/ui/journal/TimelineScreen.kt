@@ -116,7 +116,7 @@ private fun TimelineUi(vm: JournalViewModel, personId: String?, collectionId: St
     val name = person?.name ?: collection?.name ?: if (allMemories) "Memories" else ""
     val all = l?.entries.orEmpty().filter { e ->
         if (allMemories) {
-            e.kind == EntryKind.JOURNAL || e.kind == EntryKind.NOTE
+            e.kind == EntryKind.JOURNAL
         } else {
             (personId != null && personId in l?.peopleOf?.get(e.id).orEmpty()) ||
                 (collectionId != null && collectionId in l?.collectionsOf?.get(e.id).orEmpty())

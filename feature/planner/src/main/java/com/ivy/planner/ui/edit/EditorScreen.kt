@@ -26,8 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Repeat
@@ -79,6 +79,7 @@ import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerDatePicker
 import com.ivy.planner.ui.PlannerTheme
 import com.ivy.planner.ui.PlannerTimePicker
+import com.ivy.planner.ui.RichTextField
 import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.journal.ImportanceNamesDialog
 import com.ivy.planner.ui.journal.ImportancePicker
@@ -172,14 +173,12 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 shape = RoundedCornerShape(14.dp),
             )
-            OutlinedTextField(
+            // formatting toolbar appears while typing: bold, lists, checklist, links…
+            RichTextField(
                 value = state.description,
                 onValueChange = { onEvent(EditorEvent.SetDescription(it)) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Description (optional)") },
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                minLines = 2,
-                shape = RoundedCornerShape(14.dp),
+                placeholder = if (state.kind == EntryKind.NOTE || state.kind == EntryKind.JOURNAL) "Write…" else "Description (optional)",
+                minLines = if (state.kind == EntryKind.NOTE || state.kind == EntryKind.JOURNAL) 5 else 2,
             )
 
             // settings as compact chips, like the add sheet

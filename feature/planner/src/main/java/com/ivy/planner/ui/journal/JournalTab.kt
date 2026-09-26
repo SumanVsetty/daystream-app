@@ -91,7 +91,11 @@ class JournalViewModel @Inject constructor(
 
 /** Opens an entry in the editor. */
 internal fun openEntry(nav: com.ivy.navigation.Navigation, e: Entry) =
-    nav.navigateTo(PlannerEditScreen(entryId = e.id, epochDay = e.date?.toEpochDay(), kind = e.kind.name))
+    if (e.kind == EntryKind.JOURNAL || e.kind == EntryKind.NOTE) {
+        nav.navigateTo(com.ivy.navigation.PlannerEntryViewScreen(e.id))
+    } else {
+        nav.navigateTo(PlannerEditScreen(entryId = e.id, epochDay = e.date?.toEpochDay(), kind = e.kind.name))
+    }
 
 /** Ticks a task off (other kinds just open). */
 internal suspend fun toggleEntry(planner: PlannerRepository, e: Entry) {
@@ -117,7 +121,8 @@ private fun JournalUi(vm: JournalViewModel) {
 
     Scaffold { padding ->
         val l = lib
-        val journal = l?.entries.orEmpty().filter { it.kind == EntryKind.JOURNAL || it.kind == EntryKind.NOTE }
+        // the Journal is for memories; notes stay on the Day tab, in search and on person/collection pages
+        val journal = l?.entries.orEmpty().filter { it.kind == EntryKind.JOURNAL }
         val memories = remember(l, series, today) {
             if (l == null) emptyList() else Memories.pick(
                 today = today,

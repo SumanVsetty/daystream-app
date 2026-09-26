@@ -203,6 +203,12 @@ class PlannerRepository @Inject constructor(
         )
     }
 
+    /** Updates only the description, e.g. when a checkbox is ticked while reading. */
+    suspend fun setDescription(id: String, text: String) {
+        val e = entryDao.findById(id) ?: return
+        if (e.description != text) entryDao.upsert(e.copy(description = text, updatedAt = now()))
+    }
+
     suspend fun setImportance(id: String, level: Int) {
         val e = entryDao.findById(id) ?: return
         if (e.importance != level) entryDao.upsert(e.copy(importance = level, updatedAt = now()))
