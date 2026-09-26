@@ -6,7 +6,6 @@ import androidx.core.net.toUri
 import com.ivy.base.backup.BackupSection
 import com.ivy.base.legacy.SharedPrefs
 import com.ivy.base.legacy.unzip
-import com.ivy.base.legacy.zip
 import com.ivy.base.threading.DispatchersProvider
 import com.ivy.data.DataObserver
 import com.ivy.data.DataWriteEvent
@@ -33,9 +32,12 @@ import com.ivy.data.file.FileSystem
 import com.ivy.data.repository.AccountRepository
 import com.ivy.data.repository.mapper.AccountMapper
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.async
@@ -81,7 +83,25 @@ class BackupDataUseCase @Inject constructor(
     ) {
         val jsonString = generateJsonBackup()
         val file = createJsonDataFile(jsonString)
-        zip(context = context, zipFileUri, listOf(file))
+        // the data file, plus each section's files (photos, PDFs) as separate entries
+        val extra = backupSections.flatMap { s -> runCatching { s.exportFiles().toList() }.getOrDefault(emptyList()) }
+        context.contentResolver.openFileDescriptor(zipFileUri, "w").use { descriptor ->
+            descriptor?.fileDescriptor?.let { fd ->
+                ZipOutputStream(BufferedOutputStream(FileOutputStream(fd))).use { out ->
+                    out.putNextEntry(ZipEntry(file.name))
+                    file.inputStream().use { it.copyTo(out) }
+                    out.closeEntry()
+                    extra.forEach { (path, f) ->
+                        if (f.exists()) {
+                            // photos and PDFs are already compressed: store them as they are
+                            out.putNextEntry(ZipEntry(path))
+                            f.inputStream().use { it.copyTo(out) }
+                            out.closeEntry()
+                        }
+                    }
+                }
+            }
+        }
         clearCacheDir()
     }
 
@@ -181,6 +201,8 @@ class BackupDataUseCase @Inject constructor(
         val cacheFolderPath = File(context.cacheDir, folderName)
 
         unzip(context, backupFileUri, cacheFolderPath)
+        // files stored beside the data (photos, PDFs) go back first
+        backupSections.forEach { runCatching { it.importFiles(cacheFolderPath) } }
 
         val filesArray = cacheFolderPath.listFiles()
 

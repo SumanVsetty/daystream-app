@@ -196,3 +196,6 @@ data class PlannerMonthReviewScreen(val monthKey: Int) : Screen
 
 /** Year in review. Null = this year. */
 data class PlannerYearScreen(val year: Int? = null) : Screen
+
+/** Automatic backups: folder and frequency. */
+data object PlannerAutoBackupScreen : Screen

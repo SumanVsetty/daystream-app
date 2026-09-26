@@ -9,12 +9,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import java.io.File
 import java.util.Base64
 import javax.inject.Inject
 
 /** Everything in the planner database, as stored in the backup file. */
 @Serializable
 data class PlannerBackupData(
+    /** 1: files inside the data as base64. 2: files beside the data in the zip. */
     @SerialName("version") val version: Int = 1,
     @SerialName("entries") val entries: List<EntryEntity> = emptyList(),
     @SerialName("series") val series: List<SeriesEntity> = emptyList(),
@@ -25,15 +27,24 @@ data class PlannerBackupData(
     @SerialName("entryCollections") val entryCollections: List<EntryCollectionEntity> = emptyList(),
     @SerialName("people") val people: List<PersonEntity> = emptyList(),
     @SerialName("entryPeople") val entryPeople: List<EntryPersonEntity> = emptyList(),
-    /** Attachment records only; the files themselves come with the zip backup later. */
+    /** Attachment records; the files themselves are stored in the zip under "apeiro_files/". */
     @SerialName("attachments") val attachments: List<AttachmentEntity> = emptyList(),
     @SerialName("trackers") val trackers: List<TrackerEntity> = emptyList(),
     @SerialName("readings") val readings: List<ReadingEntity> = emptyList(),
     @SerialName("reminders") val reminders: List<ReminderEntity> = emptyList(),
-    /** Photo files (file name → base64), so a restore brings the pictures back too. */
+    /** Only in version 1 backups: files as base64. Still read, so old backups restore fully. */
     @SerialName("files") val files: Map<String, String> = emptyMap(),
     /** Wallet tags linked to people and collections. */
     @SerialName("tagLinks") val tagLinks: Map<String, List<String>> = emptyMap(),
+    /** Preferences worth keeping: importance names, Day layout, default reminder. */
+    @SerialName("prefs") val prefs: BackupPrefs? = null,
+)
+
+@Serializable
+data class BackupPrefs(
+    @SerialName("importanceLabels") val importanceLabels: List<String>? = null,
+    @SerialName("focusLayout") val focusLayout: Boolean? = null,
+    @SerialName("defaultReminder") val defaultReminder: Int? = null,
 )
 
 @Dao
@@ -84,6 +95,7 @@ class PlannerBackupSection @Inject constructor(
     override suspend fun export(): JsonElement = json.encodeToJsonElement(
         PlannerBackupData.serializer(),
         PlannerBackupData(
+            version = 2,
             entries = dao.entries(),
             series = dao.series(),
             occurrences = dao.occurrences(),
@@ -97,17 +109,35 @@ class PlannerBackupSection @Inject constructor(
             trackers = dao.trackers(),
             readings = dao.readings(),
             reminders = dao.reminders(),
-            files = (dao.attachments().map { it.fileName } + dao.people().mapNotNull { it.photoUri } + dao.collections().mapNotNull { it.coverUri })
-                .distinct()
-                .mapNotNull { name -> store.read(name)?.let { name to Base64.getEncoder().encodeToString(it) } }
-                .toMap(),
             tagLinks = prefs.tagLinks.mapValues { it.value.toList() },
+            prefs = BackupPrefs(
+                importanceLabels = prefs.importanceLabels,
+                focusLayout = prefs.focusLayout,
+                defaultReminder = prefs.defaultReminder ?: -1,
+            ),
         ),
     )
+
+    /** Photos, PDFs, people's photos and collection covers, stored beside the data in the zip. */
+    override suspend fun exportFiles(): Map<String, File> =
+        (dao.attachments().map { it.fileName } + dao.people().mapNotNull { it.photoUri } + dao.collections().mapNotNull { it.coverUri })
+            .distinct()
+            .map { it to store.file(it) }
+            .filter { it.second.exists() }
+            .associate { (name, file) -> "$FILES_DIR/$name" to file }
+
+    override suspend fun importFiles(dir: File) {
+        File(dir, FILES_DIR).listFiles()?.forEach { f -> runCatching { store.copyIn(f.name, f) } }
+    }
 
     override suspend fun import(data: JsonElement) {
         val backup = json.decodeFromJsonElement(PlannerBackupData.serializer(), data)
         if (backup.tagLinks.isNotEmpty()) prefs.tagLinks = prefs.tagLinks + backup.tagLinks.mapValues { it.value.toSet() }
+        backup.prefs?.let { p ->
+            p.importanceLabels?.takeIf { it.size == 4 }?.let { prefs.importanceLabels = it }
+            p.focusLayout?.let { prefs.focusLayout = it }
+            p.defaultReminder?.let { prefs.defaultReminder = it.takeIf { m -> m >= 0 } }
+        }
         backup.files.forEach { (name, b64) ->
             runCatching { store.write(name, Base64.getDecoder().decode(b64)) }
         }
@@ -130,5 +160,6 @@ class PlannerBackupSection @Inject constructor(
 
     companion object {
         const val KEY = "apeiroPlanner"
+        const val FILES_DIR = "apeiro_files"
     }
 }

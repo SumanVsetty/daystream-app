@@ -35,6 +35,7 @@ import com.ivy.navigation.MainScreen
 import com.ivy.navigation.OnboardingScreen
 import com.ivy.navigation.PieChartStatisticScreen
 import com.ivy.navigation.PlannedPaymentsScreen
+import com.ivy.navigation.PlannerAutoBackupScreen
 import com.ivy.navigation.PlannerBoardsScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerEditScreen
@@ -59,6 +60,7 @@ import com.ivy.onboarding.OnboardingScreen
 import com.ivy.piechart.PieChartStatisticScreen
 import com.ivy.planned.edit.EditPlannedScreen
 import com.ivy.planned.list.PlannedPaymentsScreen
+import com.ivy.planner.ui.backup.PlannerAutoBackupScreenImpl
 import com.ivy.planner.ui.boards.PlannerBoardsScreenImpl
 import com.ivy.planner.ui.day.PlannerDayScreenImpl
 import com.ivy.planner.ui.edit.PlannerEditScreenImpl
@@ -127,5 +129,6 @@ fun BoxWithConstraintsScope.IvyNavGraph(screen: Screen?) {
         is PlannerMonthScreen -> PlannerMonthScreenImpl(screen = screen)
         is PlannerMonthReviewScreen -> PlannerMonthReviewScreenImpl(screen = screen)
         is PlannerYearScreen -> PlannerYearScreenImpl(screen = screen)
+        PlannerAutoBackupScreen -> PlannerAutoBackupScreenImpl()
     }
 }

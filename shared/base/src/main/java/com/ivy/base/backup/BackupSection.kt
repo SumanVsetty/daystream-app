@@ -18,4 +18,10 @@ interface BackupSection {
 
     /** Merges the backed-up data into the database (existing rows with the same id are replaced). */
     suspend fun import(data: JsonElement)
+
+    /** Files to store in the backup zip beside the data, as zip path → file (e.g. photos). */
+    suspend fun exportFiles(): Map<String, java.io.File> = emptyMap()
+
+    /** Restores files from an unzipped backup; [dir] is the backup's root folder. */
+    suspend fun importFiles(dir: java.io.File) = Unit
 }

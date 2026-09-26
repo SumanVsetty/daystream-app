@@ -53,6 +53,7 @@ import com.ivy.navigation.ExchangeRatesScreen
 import com.ivy.navigation.FeaturesScreen
 import com.ivy.navigation.ImportScreen
 import com.ivy.navigation.Navigation
+import com.ivy.navigation.PlannerAutoBackupScreen
 import com.ivy.navigation.ReleasesScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
@@ -255,6 +256,16 @@ private fun BoxWithConstraintsScope.UI(
                 iconPadding = 8.dp
             ) {
                 onBackupData()
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            SettingsDefaultButton(
+                icon = R.drawable.ic_vue_security_shield,
+                text = "Automatic backup",
+                iconPadding = 8.dp
+            ) {
+                nav.navigateTo(PlannerAutoBackupScreen)
             }
 
             Spacer(Modifier.height(12.dp))

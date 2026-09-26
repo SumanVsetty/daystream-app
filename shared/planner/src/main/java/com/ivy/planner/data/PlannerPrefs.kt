@@ -50,6 +50,23 @@ class PlannerPrefs @Inject constructor(
             prefs.edit().putStringSet(KEY_TAG_LINKS, flat.toSet()).apply()
         }
 
+    /** Automatic backups: the folder (a document-tree address), every how many days, and the last run. */
+    var autoBackupFolder: String?
+        get() = prefs.getString(KEY_AUTO_FOLDER, null)
+        set(value) {
+            prefs.edit().putString(KEY_AUTO_FOLDER, value ?: "").apply()
+        }
+    var autoBackupDays: Int
+        get() = prefs.getInt(KEY_AUTO_DAYS, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_AUTO_DAYS, value).apply()
+        }
+    var autoBackupLast: String?
+        get() = prefs.getString(KEY_AUTO_LAST, null)
+        set(value) {
+            prefs.edit().putString(KEY_AUTO_LAST, value ?: "").apply()
+        }
+
     /** Snoozed reminders: reminder key → when to remind again. Past snoozes are dropped. */
     var snoozes: Map<String, LocalDateTime>
         get() = prefs.getStringSet(KEY_SNOOZES, emptySet()).orEmpty().mapNotNull { s ->
@@ -88,6 +105,9 @@ class PlannerPrefs @Inject constructor(
         const val KEY_FOCUS_LAYOUT = "day_layout_focus"
         const val KEY_IMPORTANCE = "importance_labels"
         const val KEY_TAG_LINKS = "wallet_tag_links"
+        const val KEY_AUTO_FOLDER = "auto_backup_folder"
+        const val KEY_AUTO_DAYS = "auto_backup_days"
+        const val KEY_AUTO_LAST = "auto_backup_last"
         const val KEY_SNOOZES = "reminder_snoozes"
         const val KEY_CODES = "reminder_alarm_codes"
         const val KEY_DEFAULT_REMINDER = "default_reminder_minutes"
