@@ -1,0 +1,260 @@
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/PlannerComponents.kt b/feature/planner/src/main/java/com/ivy/planner/ui/PlannerComponents.kt
+index dfbc3dd..18bc6ae 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/PlannerComponents.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/PlannerComponents.kt
+@@ -196,6 +196,8 @@ fun EntryRow(
+     routine: Pair<Int, Int>? = null,
+     /** Long-press, e.g. for "Add to today's 3". */
+     onLongClick: (() -> Unit)? = null,
++    /** Colour of the time, e.g. orange when a task is late. */
++    timeColor: Color? = null,
+ ) {
+     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
+     val onSurface = MaterialTheme.colorScheme.onSurface
+@@ -212,7 +214,7 @@ fun EntryRow(
+             text = timeLabel,
+             modifier = Modifier.width(timeColumnWidth()).padding(top = 5.dp),
+             style = TimeStyle,
+-            color = muted,
++            color = timeColor ?: muted,
+             textAlign = TextAlign.End,
+             maxLines = 1,
+             softWrap = false,
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/day/DayViewModel.kt b/feature/planner/src/main/java/com/ivy/planner/ui/day/DayViewModel.kt
+index 6233d30..5eeb4cd 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/day/DayViewModel.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/day/DayViewModel.kt
+@@ -79,6 +79,8 @@ data class DayRow(
+     val focused: Boolean = false,
+     /** Left over from an earlier day where it was one of that day's 3. */
+     val wasFocused: Boolean = false,
++    /** Its time has passed (or it's from an earlier day) and it's still open: the time shows in orange. */
++    val late: Boolean = false,
+     val checklist: List<com.ivy.planner.domain.ChecklistItem> = emptyList(),
+     /** For routines: steps done and total today. */
+     val routine: Pair<Int, Int>? = null,
+@@ -115,10 +117,8 @@ data class FocusDay(
+     /** Asks which star to swap out when a fourth is added. */
+     val swapIn: DayRow? = null,
+     val notice: String? = null,
+-    /** Open tasks from earlier today (and earlier days), latest problems first. */
+-    val stillOpen: List<DayRow> = emptyList(),
+-    val nextUp: DayRow? = null,
+-    val nextUpCountdown: String = "",
++    /** Something logged in the last few minutes, shown on the folded Earlier card. */
++    val justLogged: DayRow? = null,
+     val later: List<LaterItem> = emptyList(),
+     val earlier: List<DayRow> = emptyList(),
+     /** "3 done · 2 expenses · 1 note · 1 memory" */
+@@ -254,30 +254,39 @@ class DayViewModel @Inject constructor(
+             val later = if (date.isAfter(today)) withFreeTime(rows, LocalTime.of(8, 0)) else rows.map { LaterItem.Row(it) }
+             return FocusDay(three = three, later = later, done = done, total = tasks.size, spent = spent, isToday = false)
+         }
+-        val stillOpen = rows.filter { it.isOpenTaskLike() && it.time != null && it.time < now } +
+-            overdue.map { e ->
+-                DayRow(
+-                    key = "o:${e.id}", kind = e.kind, title = e.title, description = e.description,
+-                    meta = if (e.migrationCount > 0) "moved ${e.migrationCount}×" else "",
+-                    state = e.state, repeating = false, entryId = e.id, seriesId = null,
+-                    date = e.date ?: date, time = e.time,
+-                    timeLabel = e.date?.let { "from " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) } ?: "",
+-                    wasFocused = e.date?.let { "${e.id}@$it" in stars } ?: false,
+-                )
+-            }
+-        // no separate Next up: the importance is carried by today's 3
+-        val nextUp: DayRow? = null
++        // leftovers from earlier days go first, marked "from Wed"
++        val leftovers = overdue.map { e ->
++            val wasStar = e.date?.let { "${e.id}@$it" in stars } ?: false
++            DayRow(
++                key = "o:${e.id}", kind = e.kind, title = e.title, description = e.description,
++                meta = listOfNotNull(
++                    if (wasStar) "★ one of ${e.date?.dayOfWeek?.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)}'s 3" else null,
++                    if (e.migrationCount > 0) "moved ${e.migrationCount}×" else null,
++                ).joinToString(" · "),
++                state = e.state, repeating = false, entryId = e.id, seriesId = null,
++                date = e.date ?: date, time = e.time,
++                timeLabel = e.date?.let { "from " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) } ?: "",
++                wasFocused = wasStar,
++                late = true,
++            )
++        }
++        // "Today": everything still ahead of you, in time order; late tasks keep their place, in orange
++        fun ahead(r: DayRow): Boolean = r.money == null && when {
++            r.isOpenTaskLike() -> true
++            r.kind == EntryKind.EVENT -> r.state != EntryState.DONE && (r.eventEnd()?.let { it > now } ?: true)
++            else -> r.state != EntryState.DONE && r.time != null && r.time > now // e.g. a note planned for later
++        }
++        val todayRows = rows.filter { ahead(it) }.map { r ->
++            if (r.isOpenTaskLike() && r.time != null && r.time < now) r.copy(late = true) else r
++        }
++        val earlier = rows.filterNot { ahead(it) }
+         // just logged: from the last few minutes, or added in the last few minutes (whatever its time)
+         val graceFrom = now.minusMinutes(GRACE_MINUTES)
+         val addedSince = System.currentTimeMillis() - GRACE_MINUTES * 60_000
+-        fun justLogged(r: DayRow) = r.state != EntryState.DONE && !r.isOpenTaskLike() &&
+-            ((r.time != null && r.time >= graceFrom && graceFrom < now) || (r.createdAt > 0 && r.createdAt >= addedSince))
+-        val laterRows = rows.filter { r ->
+-            r.key != nextUp?.key && r !in stillOpen && r.state != EntryState.DONE &&
+-                (r.time == null && r.kind == EntryKind.EVENT || (r.time != null && r.time >= now) || justLogged(r))
+-        }
+-        val from = now
+-        val earlier = rows.filter { r -> r.key != nextUp?.key && r !in stillOpen && r !in laterRows }
++        val justLogged = earlier.filter { r ->
++            r.kind != EntryKind.TASK &&
++                ((r.time != null && r.time >= graceFrom && graceFrom < now) || (r.createdAt > 0 && r.createdAt >= addedSince))
++        }.maxByOrNull { it.createdAt }
+         val summary = listOfNotNull(
+             earlier.count { it.money == null && it.kind == EntryKind.TASK && it.state == EntryState.DONE }.takeIf { it > 0 }?.let { "$it done" },
+             earlier.count { it.money?.isIncome == false }.takeIf { it > 0 }?.let { if (it == 1) "1 expense" else "$it expenses" },
+@@ -287,12 +296,10 @@ class DayViewModel @Inject constructor(
+         ).joinToString(" · ")
+         return FocusDay(
+             three = three,
+-            stillOpen = stillOpen,
+-            nextUp = nextUp,
+-            nextUpCountdown = nextUp?.time?.let { FreeTime.countdown(now, it) } ?: "",
+-            later = withFreeTime(laterRows, from),
++            later = leftovers.map { LaterItem.Row(it) } + withFreeTime(todayRows, now),
+             earlier = earlier,
+             earlierSummary = summary,
++            justLogged = justLogged,
+             done = done,
+             total = tasks.size,
+             spent = spent,
+diff --git a/feature/planner/src/main/java/com/ivy/planner/ui/day/FocusDay.kt b/feature/planner/src/main/java/com/ivy/planner/ui/day/FocusDay.kt
+index a17433d..731b763 100644
+--- a/feature/planner/src/main/java/com/ivy/planner/ui/day/FocusDay.kt
++++ b/feature/planner/src/main/java/com/ivy/planner/ui/day/FocusDay.kt
+@@ -201,41 +201,13 @@ internal fun FocusDayUi(
+                     f.notice?.let { n ->
+                         item { Text(n, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), fontSize = 13.sp, color = PlannerColors.Accent) }
+                     }
+-                    // still open: late today, and left from earlier days
+-                    if (f.stillOpen.isNotEmpty()) {
+-                        item {
+-                            val shown = if (allOpen) f.stillOpen else f.stillOpen.take(2)
+-                            Column(
+-                                Modifier
+-                                    .fillMaxWidth()
+-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+-                                    .clip(RoundedCornerShape(20.dp))
+-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+-                                    .padding(start = 4.dp, end = 10.dp, top = 10.dp, bottom = 6.dp),
+-                            ) {
+-                                Row(Modifier.fillMaxWidth().padding(start = 12.dp, bottom = 2.dp)) {
+-                                    SectionLabel("Still open · ${f.stillOpen.size}")
+-                                    Spacer(Modifier.weight(1f))
+-                                    if (f.stillOpen.size > 2) {
+-                                        Text(
+-                                            if (allOpen) "Show less" else "+${f.stillOpen.size - 2} more",
+-                                            fontSize = 12.sp,
+-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+-                                            modifier = Modifier.clickable { allOpen = !allOpen },
+-                                        )
+-                                    }
+-                                }
+-                                shown.forEach { row -> StillOpenRow(row, nav, onEvent) }
+-                            }
+-                        }
+-                    }
+                     // later today (or the whole day for other days)
+                     if (f.later.isNotEmpty()) {
+                         item {
+                             Box(Modifier.padding(start = 20.dp, top = 12.dp, bottom = 2.dp)) {
+                                 SectionLabel(
+                                     when {
+-                                        f.isToday -> "Later today"
++                                        f.isToday -> "Today"
+                                         state.date.isAfter(state.today) -> "Planned"
+                                         else -> "The day"
+                                     },
+@@ -269,7 +241,13 @@ internal fun FocusDayUi(
+                             ) {
+                                 Column(Modifier.weight(1f)) {
+                                     SectionLabel("Earlier today", MaterialTheme.colorScheme.onSurfaceVariant)
+-                                    if (!earlierOpen && f.earlierSummary.isNotBlank()) Text(f.earlierSummary, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
++                                    val just = f.justLogged
++                                    if (!earlierOpen && just != null) {
++                                        // reassurance that what you just logged was saved
++                                        Text("Just logged · ${just.title}", fontSize = 13.sp, color = PlannerColors.Accent, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
++                                    } else if (!earlierOpen && f.earlierSummary.isNotBlank()) {
++                                        Text(f.earlierSummary, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
++                                    }
+                                 }
+                                 Icon(if (earlierOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, if (earlierOpen) "Fold" else "Unfold", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                             }
+@@ -278,7 +256,7 @@ internal fun FocusDayUi(
+                             itemsIndexed(f.earlier, key = { _, r -> "e:" + r.key }) { i, row -> DayEntryRow(row, f.earlier, i, nav, onEvent) }
+                         }
+                     }
+-                    if (f.three.isEmpty() && f.stillOpen.isEmpty() && f.later.isEmpty() && f.earlier.isEmpty()) {
++                    if (f.three.isEmpty() && f.later.isEmpty() && f.earlier.isEmpty()) {
+                         item {
+                             Text(
+                                 "Nothing planned. Tap below to log something.",
+@@ -341,56 +319,6 @@ private fun Action(label: String, color: Color?, onClick: () -> Unit) {
+     )
+ }
+ 
+-@OptIn(ExperimentalFoundationApi::class)
+-@Composable
+-private fun StillOpenRow(row: DayRow, nav: Navigation, onEvent: (DayEvent) -> Unit) {
+-    var menu by remember { mutableStateOf(false) }
+-    Box {
+-        RowMenu(row, menu, onDismiss = { menu = false }, nav = nav, onEvent = onEvent)
+-    Row(Modifier.fillMaxWidth().combinedClickable(onClick = { openRow(nav, row) }, onLongClick = { menu = true }).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+-        Text(
+-            row.timeLabel,
+-            modifier = Modifier.width(52.dp),
+-            fontSize = 11.sp,
+-            fontWeight = FontWeight.Bold,
+-            color = PlannerColors.Accent,
+-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+-            maxLines = 1,
+-        )
+-        Spacer(Modifier.width(4.dp))
+-        if (row.routine != null) {
+-            com.ivy.planner.ui.RoutineRing(row.routine.first, row.routine.second)
+-        } else {
+-            CheckCircle(checked = false, onToggle = { onEvent(DayEvent.Toggle(row)) })
+-        }
+-        Column(Modifier.weight(1f).padding(start = 6.dp)) {
+-            Row(verticalAlignment = Alignment.CenterVertically) {
+-                if (row.wasFocused) {
+-                    // it was one of that day's 3
+-                    Icon(Icons.Filled.Star, contentDescription = "Was one of the day's 3", tint = PlannerColors.Journal, modifier = Modifier.size(13.dp).padding(end = 3.dp))
+-                }
+-                Text(row.title, fontSize = 15.sp, maxLines = 2)
+-            }
+-            val sub = listOf(row.meta).filter { it.isNotBlank() } + row.tags.map { "● " + it.name }
+-            if (sub.isNotEmpty()) Text(sub.joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+-        }
+-        Text(
+-            "Later",
+-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).clickable { onEvent(DayEvent.Later(row)) }.padding(horizontal = 10.dp, vertical = 6.dp),
+-            fontSize = 12.sp,
+-            fontWeight = FontWeight.Bold,
+-        )
+-        Text(
+-            "Tmrw",
+-            modifier = Modifier.clickable { onEvent(DayEvent.Tomorrow(row)) }.padding(horizontal = 8.dp, vertical = 6.dp),
+-            fontSize = 12.sp,
+-            fontWeight = FontWeight.Bold,
+-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+-        )
+-    }
+-    }
+-}
+-
+ @Composable
+ private fun FreeLine(label: String) {
+     Row(Modifier.fillMaxWidth().padding(start = 76.dp, end = 20.dp, top = 2.dp, bottom = 6.dp)) {
+@@ -425,6 +353,7 @@ private fun DayEntryRow(row: DayRow, rows: List<DayRow>, i: Int, nav: Navigation
+             trailing = row.trailing,
+             routine = row.routine,
+             onLongClick = if (row.money == null && row.kind == EntryKind.TASK) ({ menu = true }) else null,
++            timeColor = if (row.late) PlannerColors.Accent else null,
+         )
+     }
+ }
