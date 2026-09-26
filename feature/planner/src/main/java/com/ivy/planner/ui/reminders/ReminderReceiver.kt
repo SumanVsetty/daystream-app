@@ -55,7 +55,7 @@ class ReminderReceiver : HiltBroadcastReceiver() {
                 notifier.cancel(info)
                 prefs.clearSnooze(info.key)
                 if (info.isSeries) {
-                    repository.setOccurrenceState(info.ownerId, LocalDate.ofEpochDay(info.epochDay), EntryState.DONE)
+                    repository.setOccurrenceState(info.ownerId, LocalDate.ofEpochDay(info.recordDay), EntryState.DONE)
                 } else {
                     repository.setState(info.ownerId, EntryState.DONE)
                 }

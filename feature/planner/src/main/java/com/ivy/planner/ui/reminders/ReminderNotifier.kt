@@ -25,6 +25,8 @@ data class ReminderInfo(
     val title: String,
     val text: String,
     val isTask: Boolean,
+    /** For repeating tasks: the day its record belongs to (differs from [epochDay] when moved). */
+    val recordDay: Long = epochDay,
 ) {
     fun into(intent: Intent): Intent = intent
         .putExtra(EXTRA_KEY, key)
@@ -35,6 +37,7 @@ data class ReminderInfo(
         .putExtra(EXTRA_TITLE, title)
         .putExtra(EXTRA_TEXT, text)
         .putExtra(EXTRA_TASK, isTask)
+        .putExtra(EXTRA_RECORD_DAY, recordDay)
 
     /** A stable notification id for this day's reminder. */
     val notificationId: Int get() = key.hashCode()
@@ -48,6 +51,7 @@ data class ReminderInfo(
         private const val EXTRA_TITLE = "apeiro.reminder.title"
         private const val EXTRA_TEXT = "apeiro.reminder.text"
         private const val EXTRA_TASK = "apeiro.reminder.task"
+        private const val EXTRA_RECORD_DAY = "apeiro.reminder.recordDay"
 
         fun from(intent: Intent): ReminderInfo? {
             val key = intent.getStringExtra(EXTRA_KEY) ?: return null
@@ -60,6 +64,7 @@ data class ReminderInfo(
                 title = intent.getStringExtra(EXTRA_TITLE).orEmpty(),
                 text = intent.getStringExtra(EXTRA_TEXT).orEmpty(),
                 isTask = intent.getBooleanExtra(EXTRA_TASK, true),
+                recordDay = intent.getLongExtra(EXTRA_RECORD_DAY, intent.getLongExtra(EXTRA_DAY, 0)),
             )
         }
 

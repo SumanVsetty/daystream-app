@@ -375,6 +375,9 @@ private fun RowMenu(row: DayRow, open: Boolean, onDismiss: () -> Unit, nav: Navi
         if (row.state == com.ivy.planner.domain.EntryState.OPEN) {
             DropdownMenuItem(text = { Text("Later · next free slot") }, onClick = { onDismiss(); onEvent(DayEvent.Later(row)) })
             DropdownMenuItem(text = { Text("Tomorrow") }, onClick = { onDismiss(); onEvent(DayEvent.Tomorrow(row)) })
+            if (row.seriesId != null) {
+                DropdownMenuItem(text = { Text("Skip today") }, onClick = { onDismiss(); onEvent(DayEvent.Skip(row)) })
+            }
         }
         DropdownMenuItem(text = { Text("Edit") }, onClick = { onDismiss(); openRow(nav, row) })
     }

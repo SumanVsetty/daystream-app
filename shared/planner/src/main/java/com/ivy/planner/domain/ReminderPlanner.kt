@@ -15,6 +15,8 @@ data class ReminderTarget(
     val title: String,
     val kind: EntryKind,
     val durationMinutes: Int?,
+    /** For a repeating task, the day its record belongs to (differs from [date] when moved). */
+    val recordDate: LocalDate = date,
 ) {
     /** Identifies this day's reminder, e.g. for snoozes and notification ids. */
     val key: String get() = "$ownerId@$date"

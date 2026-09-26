@@ -111,7 +111,7 @@ class ReminderSheetActivity : ComponentActivity() {
                     Option("Skip today", sub = "Doesn't count as missed") {
                         done {
                             prefs.clearSnooze(info.key)
-                            repository.setOccurrenceState(info.ownerId, LocalDate.ofEpochDay(info.epochDay), EntryState.SKIPPED)
+                            repository.setOccurrenceState(info.ownerId, LocalDate.ofEpochDay(info.recordDay), EntryState.SKIPPED)
                         }
                     }
                 } else {

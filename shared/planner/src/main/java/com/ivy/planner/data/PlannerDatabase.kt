@@ -29,7 +29,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReminderEntity::class,
         FocusEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class PlannerDatabase : RoomDatabase() {
@@ -79,9 +79,16 @@ abstract class PlannerDatabase : RoomDatabase() {
             }
         }
 
+        /** v5: a day of a repeating task can be moved to another day. Existing data is kept. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `occurrences` ADD COLUMN `moved_to` INTEGER")
+            }
+        }
+
         fun create(context: Context): PlannerDatabase =
             Room.databaseBuilder(context, PlannerDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

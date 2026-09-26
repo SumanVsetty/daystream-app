@@ -52,6 +52,7 @@ class ReminderScheduler @Inject constructor(
                 title = t.title,
                 text = "",
                 isTask = ReminderInfo.kindIsTask(t.kind),
+                recordDay = t.recordDate.toEpochDay(),
             )
             val code = (alarm.key + "#" + alarm.minutesBefore).hashCode()
             codes += code

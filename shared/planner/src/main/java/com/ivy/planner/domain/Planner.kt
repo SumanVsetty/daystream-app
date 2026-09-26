@@ -75,6 +75,8 @@ data class OccurrenceRecord(
     val timeOverride: LocalTime? = null,
     val completedAt: Long? = null,
     val stepsDone: Int = 0,
+    /** This day was moved to another day (e.g. "Tomorrow"); it shows there instead. */
+    val movedTo: LocalDate? = null,
 )
 
 /** One line on a Day log. */
@@ -94,7 +96,10 @@ sealed interface DayItem {
         val record: OccurrenceRecord?,
         /** For after-completion series that are late: the date it became due. */
         val dueSince: LocalDate? = null,
+        /** The day it shows on: [date], unless that day was moved. */
+        val shownOn: LocalDate = date,
     ) : DayItem {
+        val moved: Boolean get() = shownOn != date
         override val sortTime get() = record?.timeOverride ?: series.time
         override val title get() = record?.titleOverride ?: series.title
         val description get() = record?.descriptionOverride ?: series.description
@@ -112,9 +117,10 @@ data class Consistency(val done: Int, val scheduled: Int)
 object Planner {
 
     /** State of a series occurrence, applying the missed-day rule (a new day starts at midnight). */
+    /** A moved day is judged on the day it was moved to, so it isn't "missed" on its original date. */
     fun occurrenceState(date: LocalDate, record: OccurrenceRecord?, today: LocalDate): EntryState = when {
         record != null && record.state != EntryState.OPEN -> record.state
-        date.isBefore(today) -> EntryState.MISSED
+        (record?.movedTo ?: date).isBefore(today) -> EntryState.MISSED
         else -> EntryState.OPEN
     }
 
@@ -138,12 +144,20 @@ object Planner {
             if (s.schedule.isCalendarBased) {
                 if (!s.schedule.occursOn(date)) return@mapNotNull null
                 val record = records.firstOrNull { it.date == date }
+                // moved away to another day: it shows there instead
+                if (record?.movedTo != null && record.movedTo != date) return@mapNotNull null
                 DayItem.Occurrence(s, date, occurrenceState(date, record, today), record)
             } else {
                 afterCompletionItem(s, date, today, records)
             }
         }
-        return (singles + occurrences).sortedWith(
+        // days of calendar series moved here from another day
+        val movedHere = series.filterNot { it.paused }.filter { it.schedule.isCalendarBased }.flatMap { s ->
+            recordsBySeries[s.id].orEmpty()
+                .filter { it.movedTo == date && it.date != date }
+                .map { r -> DayItem.Occurrence(s, r.date, occurrenceState(r.date, r, today), r, shownOn = date) }
+        }
+        return (singles + occurrences + movedHere).sortedWith(
             compareBy<DayItem>({ it.sortTime != null }, { it.sortTime }, { it.title.lowercase() }),
         )
     }

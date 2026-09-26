@@ -93,4 +93,5 @@ fun OccurrenceEntity.toDomain(): OccurrenceRecord = OccurrenceRecord(
     descriptionOverride = descriptionOverride,
     timeOverride = timeOverride?.toLocalTime(),
     completedAt = completedAt,
+    movedTo = movedTo?.toLocalDate(),
 )

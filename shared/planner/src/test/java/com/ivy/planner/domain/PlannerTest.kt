@@ -95,4 +95,22 @@ class PlannerTest {
         Planner.weekTasks(entries, w39).map { it.id } shouldBe listOf("wk")
         Planner.reviewCandidates(entries, w39).map { it.id } shouldBe listOf("dy", "wk")
     }
+
+    @Test
+    fun `a day of a repeating task moved to tomorrow shows there, and isn't missed`() {
+        val sat = LocalDate.of(2026, 9, 26)
+        val sun = sat.plusDays(1)
+        val s = Series("hair", EntryKind.TASK, "Saturday hair routine", schedule = RepeatSchedule(RepeatRule.Weekly(1, setOf(java.time.DayOfWeek.SATURDAY)), sat), isRoutine = true)
+        val moved = OccurrenceRecord("hair", sat, EntryState.OPEN, movedTo = sun)
+        val records = mapOf("hair" to listOf(moved))
+        Planner.dayItems(sat, sat, emptyList(), listOf(s), records) shouldBe emptyList()
+        val onSunday = Planner.dayItems(sun, sat, emptyList(), listOf(s), records).single() as DayItem.Occurrence
+        onSunday.date shouldBe sat
+        onSunday.shownOn shouldBe sun
+        onSunday.moved shouldBe true
+        // on Sunday itself it's still open, not missed
+        Planner.occurrenceState(sat, moved, sun) shouldBe EntryState.OPEN
+        // and missed only after the day it was moved to
+        Planner.occurrenceState(sat, moved, sun.plusDays(1)) shouldBe EntryState.MISSED
+    }
 }

@@ -343,7 +343,7 @@ class PlannerRepository @Inject constructor(
                 .filter { it.state == EntryState.OPEN }
                 .mapNotNull { o ->
                     val time = o.sortTime ?: return@mapNotNull null
-                    ReminderTarget(o.series.id, true, day, time, o.title, o.series.kind, o.series.durationMinutes)
+                    ReminderTarget(o.series.id, true, day, time, o.title, o.series.kind, o.series.durationMinutes, recordDate = o.date)
                 }
         }.toList()
         return singles + occurrences
@@ -400,8 +400,9 @@ class PlannerRepository @Inject constructor(
     /** Ticks or unticks one day of a series. */
     suspend fun setOccurrenceState(seriesId: String, date: LocalDate, state: EntryState) {
         val existing = occurrenceDao.find(seriesId, date.toEpochDay())
+        // a move is kept too: reopening a moved day mustn't bring it back to its original date
         val hasOverrides = existing != null &&
-            (existing.titleOverride != null || existing.descriptionOverride != null || existing.timeOverride != null)
+            (existing.titleOverride != null || existing.descriptionOverride != null || existing.timeOverride != null || existing.movedTo != null)
         if (state == EntryState.OPEN && !hasOverrides) {
             occurrenceDao.delete(seriesId, date.toEpochDay())
             return
@@ -429,6 +430,19 @@ class PlannerRepository @Inject constructor(
                 descriptionOverride = description,
                 timeOverride = time?.toMinutes(),
             ),
+        )
+    }
+
+    /**
+     * Moves one day of a repeating task or routine ([date] is its own date) to [to]:
+     * it shows there instead, keeping its steps, reminders and state. Moving it back to
+     * its own date clears the move.
+     */
+    suspend fun moveOccurrence(seriesId: String, date: LocalDate, to: LocalDate) {
+        val existing = occurrenceDao.find(seriesId, date.toEpochDay())
+        val target = if (to == date) null else to.toEpochDay()
+        occurrenceDao.upsert(
+            (existing ?: OccurrenceEntity(seriesId, date.toEpochDay(), EntryState.OPEN.name)).copy(movedTo = target),
         )
     }
 

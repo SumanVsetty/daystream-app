@@ -86,6 +86,8 @@ data class OccurrenceEntity(
     @ColumnInfo(name = "completed_at") val completedAt: Long? = null,
     /** JSON snapshot of the routine steps as they were that day (for truthful history). */
     @ColumnInfo(name = "steps_snapshot") val stepsSnapshot: String? = null,
+    /** This day was moved to another day (epoch day), e.g. with "Tomorrow". */
+    @ColumnInfo(name = "moved_to") val movedTo: Long? = null,
 )
 
 /** A step of a routine (or a checklist item). Generic: heading + description + optional extras. */

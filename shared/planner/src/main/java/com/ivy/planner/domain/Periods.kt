@@ -44,6 +44,8 @@ object Periods {
             series.filter { it.kind == EntryKind.TASK && it.schedule.isCalendarBased }.forEach { s ->
                 val byDate = records[s.id].orEmpty().associateBy { it.date }
                 s.schedule.occurrencesBetween(from, last).forEach { d ->
+                    // a day moved beyond this period counts there instead
+                    if (byDate[d]?.movedTo?.isAfter(last) == true) return@forEach
                     val state = Planner.occurrenceState(d, byDate[d], today)
                     if (state == EntryState.SKIPPED) return@forEach
                     val done = state == EntryState.DONE

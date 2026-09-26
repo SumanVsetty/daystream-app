@@ -81,6 +81,8 @@ data class DayRow(
     val wasFocused: Boolean = false,
     /** Its time has passed (or it's from an earlier day) and it's still open: the time shows in orange. */
     val late: Boolean = false,
+    /** For a day of a repeating task that was moved: the day it shows on ([date] stays its own day). */
+    val shownOn: LocalDate? = null,
     val checklist: List<com.ivy.planner.domain.ChecklistItem> = emptyList(),
     /** For routines: steps done and total today. */
     val routine: Pair<Int, Int>? = null,
@@ -147,8 +149,10 @@ sealed interface DayEvent {
     data object CancelSwap : DayEvent
     /** Move to the next free slot today. */
     data class Later(val row: DayRow) : DayEvent
-    /** Same time tomorrow (repeating tasks: skip today). */
+    /** Same time tomorrow; for a repeating task or routine, this one day moves to tomorrow. */
     data class Tomorrow(val row: DayRow) : DayEvent
+    /** Repeating tasks and routines: skip this one day (doesn't count as missed). */
+    data class Skip(val row: DayRow) : DayEvent
     /** Reload expenses (e.g. after returning from the money screens). */
     data object Refresh : DayEvent
 }
@@ -403,6 +407,7 @@ class DayViewModel @Inject constructor(
                     else -> ""
                 },
                 meta = listOfNotNull(
+                    if (moved) "moved from ${date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)}" else null,
                     repository.describe(series).replaceFirstChar { it.lowercase() },
                     dueSince?.let { "due since ${it.withWeek()}" },
                     if (state == EntryState.MISSED) "missed" else null,
@@ -416,6 +421,7 @@ class DayViewModel @Inject constructor(
                 time = sortTime,
                 durationMinutes = series.durationMinutes,
                 isRoutine = series.isRoutine,
+                shownOn = shownOn,
             )
         }
     }
@@ -543,8 +549,13 @@ class DayViewModel @Inject constructor(
                 if (row.entryId != null) {
                     repository.reschedule(row.entryId, LocalDate.now().plusDays(1), row.time ?: LocalTime.of(9, 0))
                 } else if (row.seriesId != null) {
-                    repository.setOccurrenceState(row.seriesId, row.date, EntryState.SKIPPED)
+                    // move just this day; the schedule itself is unchanged
+                    repository.moveOccurrence(row.seriesId, row.date, (row.shownOn ?: row.date).plusDays(1))
                 }
+            }
+            is DayEvent.Skip -> viewModelScope.launch {
+                val row = event.row
+                if (row.seriesId != null) repository.setOccurrenceState(row.seriesId, row.date, EntryState.SKIPPED)
             }
         }
     }
