@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,7 @@ import com.ivy.base.model.TransactionType
 import com.ivy.navigation.EditTransactionScreen
 import com.ivy.navigation.Navigation
 import com.ivy.navigation.PlannerEditScreen
+import com.ivy.navigation.PlannerMonthScreen
 import com.ivy.navigation.PlannerReviewScreen
 import com.ivy.navigation.PlannerRoutineScreen
 import com.ivy.navigation.PlannerSearchScreen
@@ -67,6 +69,7 @@ import com.ivy.navigation.navigation
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.RapidLogParser
 import com.ivy.planner.domain.isoWeek
+import com.ivy.planner.domain.key
 import com.ivy.planner.ui.CheckCircle
 import com.ivy.planner.ui.EntryRow
 import com.ivy.planner.ui.MonthCalendar
@@ -343,6 +346,12 @@ internal fun FocusDayUi(
                     nav.navigateTo(PlannerWeekScreen(w.year, w.week))
                 },
             )
+            TextButton(onClick = {
+                monthOpen = false
+                nav.navigateTo(PlannerMonthScreen(java.time.YearMonth.from(state.date).key()))
+            }, modifier = Modifier.padding(horizontal = 12.dp)) {
+                Text("Open ${state.date.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)} month log", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
+            }
             LayoutSwitch(state.focusLayout) {
                 onEvent(DayEvent.ToggleLayout)
                 monthOpen = false

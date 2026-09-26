@@ -31,6 +31,7 @@ fun EntryEntity.toDomain(): Entry = Entry(
     migrationCount = migrationCount,
     completedAt = completedAt,
     durationMinutes = durationMinutes,
+    month = monthKey,
 )
 
 fun Entry.toEntity(createdAt: Long, now: Long): EntryEntity = EntryEntity(
@@ -49,6 +50,7 @@ fun Entry.toEntity(createdAt: Long, now: Long): EntryEntity = EntryEntity(
     updatedAt = now,
     completedAt = completedAt,
     durationMinutes = durationMinutes,
+    monthKey = month,
 )
 
 fun SeriesEntity.toDomain(): Series? {

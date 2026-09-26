@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.PlayCircle
@@ -62,6 +63,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ivy.navigation.PlannerBoardsScreen
 import com.ivy.navigation.PlannerDayScreen
+import com.ivy.navigation.PlannerMonthScreen
 import com.ivy.navigation.PlannerReviewScreen
 import com.ivy.navigation.PlannerRoutinesScreen
 import com.ivy.navigation.PlannerWeekScreen
@@ -71,6 +73,7 @@ import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.EntryKind
 import com.ivy.planner.domain.EntryState
 import com.ivy.planner.domain.IsoWeek
+import com.ivy.planner.domain.key
 import com.ivy.planner.ui.CheckCircle
 import com.ivy.planner.ui.PlannerColors
 import com.ivy.planner.ui.PlannerTheme
@@ -161,6 +164,14 @@ private fun WeekUi(state: WeekState, onEvent: (WeekEvent) -> Unit, asTab: Boolea
                                     text = { Text("Routines") },
                                     leadingIcon = { Icon(Icons.Outlined.PlayCircle, null) },
                                     onClick = { menu = false; nav.navigateTo(PlannerRoutinesScreen) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Month log") },
+                                    leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null) },
+                                    onClick = {
+                                        menu = false
+                                        nav.navigateTo(PlannerMonthScreen(java.time.YearMonth.from(state.week.monday).key()))
+                                    },
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Weekly review") },

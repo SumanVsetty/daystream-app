@@ -187,3 +187,12 @@ data class PlannerRoutineEditScreen(val seriesId: String? = null, val epochDay: 
 
 /** All routines. */
 data object PlannerRoutinesScreen : Screen
+
+/** Month log for a month, as its key (e.g. 202609). Null = this month. */
+data class PlannerMonthScreen(val monthKey: Int? = null) : Screen
+
+/** Closing a month: decide on its open tasks and goals. */
+data class PlannerMonthReviewScreen(val monthKey: Int) : Screen
+
+/** Year in review. Null = this year. */
+data class PlannerYearScreen(val year: Int? = null) : Screen

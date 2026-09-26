@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +54,7 @@ import coil.compose.AsyncImage
 import com.ivy.navigation.PlannerEditScreen
 import com.ivy.navigation.PlannerSearchScreen
 import com.ivy.navigation.PlannerTimelineScreen
+import com.ivy.navigation.PlannerYearScreen
 import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.planner.data.LibraryRepository
@@ -142,6 +144,7 @@ private fun JournalUi(vm: JournalViewModel) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    IconButton(onClick = { nav.navigateTo(PlannerYearScreen()) }) { Icon(Icons.Outlined.AutoAwesome, "Year in review") }
                     IconButton(onClick = { nav.navigateTo(PlannerSearchScreen) }) { Icon(Icons.Outlined.Search, "Search") }
                 }
             }

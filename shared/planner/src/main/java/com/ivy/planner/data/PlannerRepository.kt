@@ -14,6 +14,7 @@ import com.ivy.planner.domain.RepeatCodec
 import com.ivy.planner.domain.RepeatEnd
 import com.ivy.planner.domain.Series
 import com.ivy.planner.domain.isoWeek
+import com.ivy.planner.domain.key
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
@@ -152,6 +153,36 @@ class PlannerRepository @Inject constructor(
     }
 
     suspend fun getEntry(id: String): Entry? = entryDao.findById(id)?.toDomain()
+
+    /** Month goals: tasks for a month, without a day. */
+    fun observeMonthGoals(month: java.time.YearMonth): Flow<List<Entry>> =
+        entryDao.observeMonthGoals(month.key()).map { list -> list.map { it.toDomain() } }
+
+    suspend fun addMonthGoal(title: String, month: java.time.YearMonth): String {
+        val id = newId()
+        entryDao.upsert(
+            Entry(id = id, kind = EntryKind.TASK, title = title.trim(), month = month.key())
+                .toEntity(createdAt = now(), now = now()),
+        )
+        return id
+    }
+
+    /** Monthly migration: a task becomes a goal of [month] (no day), counted as migrated. */
+    suspend fun migrateToMonth(id: String, month: java.time.YearMonth) {
+        val e = entryDao.findById(id) ?: return
+        entryDao.upsert(
+            e.copy(date = null, timeMinutes = null, weekYear = null, weekNum = null, monthKey = month.key(),
+                migrationCount = e.migrationCount + 1, updatedAt = now()),
+        )
+    }
+
+    /** Everything for a period's stats: entries dated in it, all series, and their records. */
+    suspend fun periodData(from: LocalDate, to: LocalDate): Triple<List<Entry>, List<Series>, Map<String, List<OccurrenceRecord>>> =
+        Triple(
+            entryDao.between(from.toEpochDay(), to.toEpochDay()).map { it.toDomain() },
+            seriesDao.all().mapNotNull { it.toDomain() },
+            occurrenceDao.since(from.toEpochDay()).map { it.toDomain() }.filter { !it.date.isAfter(to) }.groupBy { it.seriesId },
+        )
 
     fun observeJournal(): Flow<List<Entry>> = entryDao.observeJournal().map { list -> list.map { it.toDomain() } }
 

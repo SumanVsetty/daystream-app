@@ -36,6 +36,8 @@ data class EntryEntity(
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     @ColumnInfo(name = "completed_at") val completedAt: Long? = null,
     @ColumnInfo(name = "duration_minutes") val durationMinutes: Int? = null,
+    /** Month goals: the month they belong to, e.g. 202609. */
+    @ColumnInfo(name = "month_key") val monthKey: Int? = null,
 )
 
 /** Full-text search index over entries (title and description). */

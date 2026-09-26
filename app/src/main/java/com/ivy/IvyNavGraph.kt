@@ -38,6 +38,8 @@ import com.ivy.navigation.PlannedPaymentsScreen
 import com.ivy.navigation.PlannerBoardsScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerEditScreen
+import com.ivy.navigation.PlannerMonthReviewScreen
+import com.ivy.navigation.PlannerMonthScreen
 import com.ivy.navigation.PlannerReviewScreen
 import com.ivy.navigation.PlannerRoutineEditScreen
 import com.ivy.navigation.PlannerRoutineScreen
@@ -45,6 +47,7 @@ import com.ivy.navigation.PlannerRoutinesScreen
 import com.ivy.navigation.PlannerSearchScreen
 import com.ivy.navigation.PlannerTimelineScreen
 import com.ivy.navigation.PlannerWeekScreen
+import com.ivy.navigation.PlannerYearScreen
 import com.ivy.navigation.PollScreen
 import com.ivy.navigation.ReleasesScreen
 import com.ivy.navigation.ReportScreen
@@ -60,6 +63,9 @@ import com.ivy.planner.ui.boards.PlannerBoardsScreenImpl
 import com.ivy.planner.ui.day.PlannerDayScreenImpl
 import com.ivy.planner.ui.edit.PlannerEditScreenImpl
 import com.ivy.planner.ui.journal.PlannerTimelineScreenImpl
+import com.ivy.planner.ui.period.PlannerMonthScreenImpl
+import com.ivy.planner.ui.period.PlannerYearScreenImpl
+import com.ivy.planner.ui.review.PlannerMonthReviewScreenImpl
 import com.ivy.planner.ui.review.PlannerReviewScreenImpl
 import com.ivy.planner.ui.routines.PlannerRoutineEditScreenImpl
 import com.ivy.planner.ui.routines.PlannerRoutineScreenImpl
@@ -118,5 +124,8 @@ fun BoxWithConstraintsScope.IvyNavGraph(screen: Screen?) {
         is PlannerRoutineScreen -> PlannerRoutineScreenImpl(screen = screen)
         is PlannerRoutineEditScreen -> PlannerRoutineEditScreenImpl(screen = screen)
         PlannerRoutinesScreen -> PlannerRoutinesScreenImpl()
+        is PlannerMonthScreen -> PlannerMonthScreenImpl(screen = screen)
+        is PlannerMonthReviewScreen -> PlannerMonthReviewScreenImpl(screen = screen)
+        is PlannerYearScreen -> PlannerYearScreenImpl(screen = screen)
     }
 }

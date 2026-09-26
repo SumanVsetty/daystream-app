@@ -42,6 +42,16 @@ import com.ivy.planner.ui.SectionLabel
 import com.ivy.planner.ui.withWeek
 import java.time.LocalDate
 
+/** Closing a month (the monthly migration). */
+@Composable
+fun PlannerMonthReviewScreenImpl(screen: com.ivy.navigation.PlannerMonthReviewScreen) {
+    val viewModel: ReviewViewModel = screenScopedViewModel()
+    androidx.compose.runtime.LaunchedEffect(screen) {
+        viewModel.onEvent(ReviewEvent.SetMonth(com.ivy.planner.domain.monthOf(screen.monthKey)))
+    }
+    PlannerTheme { ReviewUi(viewModel.uiState(), viewModel::onEvent) }
+}
+
 @Composable
 fun PlannerReviewScreenImpl() {
     val viewModel: ReviewViewModel = screenScopedViewModel()
@@ -74,7 +84,7 @@ private fun ReviewUi(state: ReviewState, onEvent: (ReviewEvent) -> Unit) {
                 }
             }
             SectionLabel("Weekly review")
-            Text("Closing week ${state.week.week}", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text(state.title, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             if (total > 0) {
                 LinearProgressIndicator(
                     progress = { state.reviewed.toFloat() / total },
@@ -103,7 +113,7 @@ private fun ReviewUi(state: ReviewState, onEvent: (ReviewEvent) -> Unit) {
                     ) {
                         Text(
                             listOfNotNull(
-                                current.date?.let { "Planned for ${it.withWeek()}" } ?: "Week ${state.week.week} task",
+                                current.date?.let { "Planned for ${it.withWeek()}" } ?: state.undatedLabel,
                                 if (current.migrationCount > 0) "migrated ${current.migrationCount}×" else null,
                             ).joinToString(" · "),
                             fontSize = 13.sp,
@@ -118,7 +128,7 @@ private fun ReviewUi(state: ReviewState, onEvent: (ReviewEvent) -> Unit) {
                             Choice("× Done", "It's finished", PlannerColors.Done, PlannerColors.OnDone, Modifier.weight(1f)) {
                                 onEvent(ReviewEvent.Done(current.id))
                             }
-                            Choice("> Migrate", "Into week ${state.thisWeek.week}", PlannerColors.Accent, PlannerColors.OnAccent, Modifier.weight(1f)) {
+                            Choice("> Migrate", state.migrateTo, PlannerColors.Accent, PlannerColors.OnAccent, Modifier.weight(1f)) {
                                 onEvent(ReviewEvent.Migrate(current.id))
                             }
                         }
@@ -182,11 +192,11 @@ private fun Choice(title: String, sub: String, bg: Color, fg: Color, modifier: M
 private fun Done(state: ReviewState, onClose: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            if (state.reviewed > 0) "Week ${state.week.week} is closed." else "Nothing left open in week ${state.week.week}.",
+            if (state.reviewed > 0) state.closedText else state.nothingText,
             fontSize = 20.sp,
             fontWeight = FontWeight.ExtraBold,
         )
-        Text("Every open task has a decision. Have a good week ${state.thisWeek.week}.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(state.goodbye, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             "Back to today",
             Modifier

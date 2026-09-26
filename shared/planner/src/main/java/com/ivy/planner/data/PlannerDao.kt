@@ -51,6 +51,9 @@ interface EntryDao {
     @Query("SELECT * FROM entries")
     suspend fun all(): List<EntryEntity>
 
+    @Query("SELECT * FROM entries WHERE month_key = :key AND date IS NULL")
+    fun observeMonthGoals(key: Int): Flow<List<EntryEntity>>
+
     /** Journal entries and notes, newest first. */
     @Query("SELECT * FROM entries WHERE kind IN ('JOURNAL', 'NOTE') ORDER BY date DESC, time_minutes DESC, created_at DESC")
     fun observeJournal(): Flow<List<EntryEntity>>

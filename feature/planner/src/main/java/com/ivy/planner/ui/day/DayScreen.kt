@@ -64,6 +64,7 @@ import com.ivy.base.model.TransactionType
 import com.ivy.navigation.EditTransactionScreen
 import com.ivy.navigation.PlannerDayScreen
 import com.ivy.navigation.PlannerEditScreen
+import com.ivy.navigation.PlannerMonthScreen
 import com.ivy.navigation.PlannerReviewScreen
 import com.ivy.navigation.PlannerRoutineScreen
 import com.ivy.navigation.PlannerSearchScreen
@@ -72,6 +73,7 @@ import com.ivy.navigation.navigation
 import com.ivy.navigation.screenScopedViewModel
 import com.ivy.planner.domain.Entry
 import com.ivy.planner.domain.isoWeek
+import com.ivy.planner.domain.key
 import com.ivy.planner.ui.CheckCircle
 import com.ivy.planner.ui.DayTitleFmt
 import com.ivy.planner.ui.EntryRow
@@ -331,6 +333,12 @@ private fun DayUi(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Boolean) 
                     nav.navigateTo(PlannerWeekScreen(w.year, w.week))
                 },
             )
+            TextButton(onClick = {
+                monthOpen = false
+                nav.navigateTo(PlannerMonthScreen(java.time.YearMonth.from(state.date).key()))
+            }, modifier = Modifier.padding(horizontal = 12.dp)) {
+                Text("Open ${state.date.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)} month log", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
+            }
             LayoutSwitch(state.focusLayout) {
                 onEvent(DayEvent.ToggleLayout)
                 monthOpen = false

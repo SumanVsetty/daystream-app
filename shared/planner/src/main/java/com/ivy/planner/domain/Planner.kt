@@ -40,6 +40,8 @@ data class Entry(
     val completedAt: Long? = null,
     /** Null means the default of [AutoTime.DEFAULT_DURATION] minutes. */
     val durationMinutes: Int? = null,
+    /** A month goal belongs to a month (e.g. 202609) rather than a day or week. */
+    val month: Int? = null,
 )
 
 /** A repeating task or routine: the "master" that owns the schedule. */

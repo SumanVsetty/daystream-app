@@ -28,7 +28,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReadingEntity::class,
         ReminderEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class PlannerDatabase : RoomDatabase() {
@@ -60,9 +60,16 @@ abstract class PlannerDatabase : RoomDatabase() {
             }
         }
 
+        /** v3: month goals (tasks that belong to a month). Existing data is kept. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `entries` ADD COLUMN `month_key` INTEGER")
+            }
+        }
+
         fun create(context: Context): PlannerDatabase =
             Room.databaseBuilder(context, PlannerDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }
