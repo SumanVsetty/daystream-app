@@ -264,3 +264,18 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders")
     fun observeAll(): Flow<List<ReminderEntity>>
 }
+
+@Dao
+interface FocusDao {
+    @Upsert
+    suspend fun upsert(focus: FocusEntity)
+
+    @Query("DELETE FROM day_focus WHERE date = :date AND owner_id = :ownerId")
+    suspend fun delete(date: Long, ownerId: String)
+
+    @Query("SELECT * FROM day_focus WHERE date = :date ORDER BY position")
+    suspend fun forDay(date: Long): List<FocusEntity>
+
+    @Query("SELECT * FROM day_focus")
+    fun observeAll(): Flow<List<FocusEntity>>
+}

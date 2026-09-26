@@ -26,6 +26,8 @@ object RapidLogParser {
         val durationMinutes: Int?,
         /** Hashtags, e.g. "#quotes" → "quotes": the board or collection to put it in. */
         val tags: List<String> = emptyList(),
+        /** "! " at the start: one of today's 3. */
+        val focus: Boolean = false,
     ) {
         val understoodSomething get() = date != null || time != null || durationMinutes != null
     }
@@ -60,6 +62,12 @@ object RapidLogParser {
             trimmed.startsWith("o ") || trimmed.startsWith("○ ") -> { kind = EntryKind.EVENT; text = " " + trimmed.drop(2) + " " }
         }
 
+        // "! Close L&T proposal": one of the day's 3 most important tasks
+        var focus = false
+        Regex("""^\s*!\s+""").find(text)?.let {
+            focus = true
+            text = " " + text.substring(it.range.last + 1)
+        }
         var date: LocalDate? = null
         var time: LocalTime? = null
         var duration: Int? = null
@@ -170,7 +178,7 @@ object RapidLogParser {
             .trimEnd(',', ';', '-', '–')
             .replace(Regex("""\s+(at|on|by|for)$""", o), "")
             .trim()
-        return Result(kind, title, date, time, duration, tags)
+        return Result(kind, title, date, time, duration, tags, focus && kind == EntryKind.TASK)
     }
 
     /** The coming [dow] after today; "this friday" on a Friday means today. */

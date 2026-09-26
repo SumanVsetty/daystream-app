@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Notifications
@@ -219,6 +220,7 @@ private fun EditorUi(state: EditorState, onEvent: (EditorEvent) -> Unit) {
                 }
                 if (state.kind == EntryKind.TASK) {
                     BoardField(state, onEvent)
+                    EditorChip(Icons.Filled.Star, "Today's 3", set = state.focus) { onEvent(EditorEvent.ToggleFocus) }
                 }
             }
             if (state.kind == EntryKind.TASK && !state.isOccurrence) {

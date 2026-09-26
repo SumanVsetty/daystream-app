@@ -203,6 +203,13 @@ private fun AddSheet(vm: AddSheetViewModel, onClose: () -> Unit) {
                     Icon(Icons.Filled.ArrowUpward, contentDescription = "Save", tint = Color(0xFF1B1D1B))
                 }
             }
+            if (vm.focusFull) {
+                Text(
+                    "Saved, but today's 3 is already full. Long-press a task on the Day tab to swap.",
+                    fontSize = 13.sp,
+                    color = PlannerColors.Accent,
+                )
+            }
             if (vm.showDetails) {
                 OutlinedTextField(
                     value = vm.description,
@@ -337,6 +344,9 @@ private fun AddSheet(vm: AddSheetViewModel, onClose: () -> Unit) {
                             boards.forEach { b -> DropdownMenuItem(text = { Text(b.name) }, onClick = { vm.boardId = b.id; boardMenu = false }) }
                         }
                     }
+                }
+                if (kind == EntryKind.TASK) {
+                    Chip("★ Today's 3", set = vm.focus || vm.parsed.focus, color = PlannerColors.Journal) { vm.focus = !vm.focus }
                 }
                 if (kind == EntryKind.TASK) {
                     Chip(

@@ -216,3 +216,12 @@ data class ReminderEntity(
     @ColumnInfo(name = "owner_id") val ownerId: String,
     @ColumnInfo(name = "minutes_before") val minutesBefore: Int,
 )
+
+/** One of a day's 3 most important tasks: the entry or series, on that day. */
+@Serializable
+@Entity(tableName = "day_focus", primaryKeys = ["date", "owner_id"])
+data class FocusEntity(
+    @ColumnInfo(name = "date") val date: Long,
+    @ColumnInfo(name = "owner_id") val ownerId: String,
+    @ColumnInfo(name = "position") val position: Int,
+)

@@ -1,8 +1,10 @@
 package com.ivy.planner.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -165,6 +167,7 @@ fun timelineColor(kind: EntryKind, state: EntryState, isMoney: Boolean = false, 
 @Immutable
 data class RowTag(val name: String, val color: Color)
 
+@OptIn(ExperimentalFoundationApi::class)
 /**
  * One line on a timeline, in the compact layout: time on the left, then the icon on the
  * connecting line, then the text. [lineAbove] / [lineBelow] draw the line (null = none).
@@ -191,6 +194,8 @@ fun EntryRow(
     trailing: String = "",
     /** For routines: steps done and total, shown as a progress ring. */
     routine: Pair<Int, Int>? = null,
+    /** Long-press, e.g. for "Add to today's 3". */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val faded = state == EntryState.DONE || state == EntryState.MISSED || state == EntryState.SKIPPED
     val onSurface = MaterialTheme.colorScheme.onSurface
@@ -199,7 +204,7 @@ fun EntryRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         verticalAlignment = Alignment.Top,
     ) {
         // time column: one line, always; sized to fit "00:00" at the phone's text size

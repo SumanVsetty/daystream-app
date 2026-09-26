@@ -33,6 +33,9 @@ data class PlannerSnapshot(
     val records: Map<String, List<OccurrenceRecord>>,
 )
 
+/** How many tasks a day can star. */
+const val FOCUS_MAX = 3
+
 @Singleton
 class PlannerRepository @Inject constructor(
     private val db: PlannerDatabase,
@@ -110,6 +113,7 @@ class PlannerRepository @Inject constructor(
             durationMinutes = parsed.durationMinutes,
         )
         // a time you typed yourself gets the default reminder
+        if (parsed.focus) addFocus(parsed.date ?: selectedDate ?: LocalDate.now(), id)
         if (parsed.time != null && (parsed.kind == EntryKind.TASK || parsed.kind == EntryKind.EVENT)) {
             prefs.defaultReminder?.let { setReminders(id, listOf(it)) }
         }
@@ -274,6 +278,32 @@ class PlannerRepository @Inject constructor(
                 title = series.title.trim(),
             ).toEntity(createdAt = existing?.createdAt ?: now(), now = now()),
         )
+    }
+
+    // ---------------------------------------------------------------- today's 3
+
+    /** Every starred task, as "ownerId@date" (a small table; used for today and earlier days). */
+    fun observeFocus(): Flow<Set<String>> = db.focusDao().observeAll().map { list ->
+        list.map { "${it.ownerId}@${LocalDate.ofEpochDay(it.date)}" }.toSet()
+    }
+
+    suspend fun focusFor(date: LocalDate): List<String> = db.focusDao().forDay(date.toEpochDay()).map { it.ownerId }
+
+    /** Stars a task for [date]; false when that day already has [FOCUS_MAX]. */
+    suspend fun addFocus(date: LocalDate, ownerId: String): Boolean {
+        val current = db.focusDao().forDay(date.toEpochDay())
+        if (current.any { it.ownerId == ownerId }) return true
+        if (current.size >= FOCUS_MAX) return false
+        db.focusDao().upsert(FocusEntity(date.toEpochDay(), ownerId, (current.maxOfOrNull { it.position } ?: -1) + 1))
+        return true
+    }
+
+    suspend fun removeFocus(date: LocalDate, ownerId: String) = db.focusDao().delete(date.toEpochDay(), ownerId)
+
+    /** Swaps one star for another when the day is full. */
+    suspend fun swapFocus(date: LocalDate, out: String, into: String) {
+        removeFocus(date, out)
+        addFocus(date, into)
     }
 
     // ---------------------------------------------------------------- reminders

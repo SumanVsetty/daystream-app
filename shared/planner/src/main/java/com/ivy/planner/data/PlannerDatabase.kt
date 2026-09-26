@@ -27,8 +27,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TrackerEntity::class,
         ReadingEntity::class,
         ReminderEntity::class,
+        FocusEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class PlannerDatabase : RoomDatabase() {
@@ -43,6 +44,7 @@ abstract class PlannerDatabase : RoomDatabase() {
     abstract fun reminderDao(): ReminderDao
     abstract fun attachmentDao(): AttachmentDao
     abstract fun occurrenceStepDao(): OccurrenceStepDao
+    abstract fun focusDao(): FocusDao
 
     companion object {
         const val NAME = "apeiro_planner.db"
@@ -67,9 +69,19 @@ abstract class PlannerDatabase : RoomDatabase() {
             }
         }
 
+        /** v4: today's 3 (a small table of starred tasks per day). Existing data is kept. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `day_focus` (`date` INTEGER NOT NULL, `owner_id` TEXT NOT NULL, " +
+                        "`position` INTEGER NOT NULL, PRIMARY KEY(`date`, `owner_id`))",
+                )
+            }
+        }
+
         fun create(context: Context): PlannerDatabase =
             Room.databaseBuilder(context, PlannerDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

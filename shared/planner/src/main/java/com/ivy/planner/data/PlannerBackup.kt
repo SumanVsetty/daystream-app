@@ -38,6 +38,8 @@ data class PlannerBackupData(
     @SerialName("tagLinks") val tagLinks: Map<String, List<String>> = emptyMap(),
     /** Preferences worth keeping: importance names, Day layout, default reminder. */
     @SerialName("prefs") val prefs: BackupPrefs? = null,
+    /** Today's 3, per day. */
+    @SerialName("focus") val focus: List<FocusEntity> = emptyList(),
 )
 
 @Serializable
@@ -76,6 +78,8 @@ interface PlannerBackupDao {
     @Upsert suspend fun upsertTrackers(items: List<TrackerEntity>)
     @Upsert suspend fun upsertReadings(items: List<ReadingEntity>)
     @Upsert suspend fun upsertReminders(items: List<ReminderEntity>)
+    @Upsert suspend fun upsertFocus(items: List<FocusEntity>)
+    @Query("SELECT * FROM day_focus") suspend fun focus(): List<FocusEntity>
 }
 
 /**
@@ -110,6 +114,7 @@ class PlannerBackupSection @Inject constructor(
             readings = dao.readings(),
             reminders = dao.reminders(),
             tagLinks = prefs.tagLinks.mapValues { it.value.toList() },
+            focus = dao.focus(),
             prefs = BackupPrefs(
                 importanceLabels = prefs.importanceLabels,
                 focusLayout = prefs.focusLayout,
@@ -155,6 +160,7 @@ class PlannerBackupSection @Inject constructor(
             dao.upsertTrackers(backup.trackers)
             dao.upsertReadings(backup.readings)
             dao.upsertReminders(backup.reminders)
+            dao.upsertFocus(backup.focus)
         }
     }
 

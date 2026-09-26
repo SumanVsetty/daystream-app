@@ -64,6 +64,7 @@ data class EditorState(
     /** Existing files (attachment id → file, type) and files picked but not saved yet. */
     val files: List<Triple<String, File, String>>,
     val pendingFiles: List<Uri>,
+    val focus: Boolean = false,
 )
 
 sealed interface EditorEvent {
@@ -99,6 +100,7 @@ sealed interface EditorEvent {
     data class RemoveFile(val attachmentId: String) : EditorEvent
     data class RemovePendingFile(val uri: Uri) : EditorEvent
     data class RenameImportance(val labels: List<String>) : EditorEvent
+    data object ToggleFocus : EditorEvent
 }
 
 @HiltViewModel
@@ -133,6 +135,8 @@ class EditorViewModel @Inject constructor(
     private var checklistTouched = false
     private var files by mutableStateOf(listOf<Triple<String, File, String>>())
     private var pendingFiles by mutableStateOf(listOf<Uri>())
+    private var focus by mutableStateOf(false)
+    private var focusTouched = false
 
     init {
         ImportanceNames.labels = prefs.importanceLabels
@@ -170,6 +174,7 @@ class EditorViewModel @Inject constructor(
         checklist = checklist,
         files = files,
         pendingFiles = pendingFiles,
+        focus = focus,
     )
 
     override fun onEvent(event: EditorEvent) {
@@ -244,6 +249,10 @@ class EditorViewModel @Inject constructor(
                 checklist = checklist + checklistFromLines(description) { library.newItemId() }
                 description = ""
             }
+            EditorEvent.ToggleFocus -> {
+                focusTouched = true
+                focus = !focus
+            }
             is EditorEvent.AddFiles -> pendingFiles = pendingFiles + event.uris
             is EditorEvent.RemoveFile -> {
                 removedPhotos = removedPhotos + event.attachmentId
@@ -296,6 +305,7 @@ class EditorViewModel @Inject constructor(
             val owner = event.entryId ?: event.seriesId
             if (owner != null) {
                 reminders = repository.reminders(owner).sorted()
+                focus = owner in repository.focusFor(date)
                 val types = library.allCollections().associateBy { it.id }
                 val linked = library.collectionsOf(owner)
                 boardId = linked.firstOrNull { types[it]?.type == CollectionType.BOARD }
@@ -317,6 +327,9 @@ class EditorViewModel @Inject constructor(
 
     /** Board, collections, people, importance and photos, once the entry or series has an id. */
     private suspend fun applyExtras(ownerId: String, isEntry: Boolean) {
+        if (focusTouched && kind == EntryKind.TASK) {
+            if (focus) repository.addFocus(date, ownerId) else repository.removeFocus(date, ownerId)
+        }
         library.setCollections(ownerId, collectionIds.toList() + listOfNotNull(boardId))
         repository.setReminders(ownerId, if (kind == EntryKind.TASK || kind == EntryKind.EVENT) reminders else emptyList())
         if (!isEntry) return

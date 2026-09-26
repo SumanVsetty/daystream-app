@@ -1,7 +1,10 @@
 package com.ivy.planner.ui.day
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -32,7 +35,11 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -176,6 +183,24 @@ internal fun FocusDayUi(
                     contentPadding = PaddingValues(top = 8.dp, bottom = padding.calculateBottomPadding() + if (asTab) 170.dp else 90.dp),
                 ) {
                     item { topBanners() }
+                    // today's 3: the tasks that make the day a success
+                    if (f.three.isNotEmpty()) {
+                        item { TodaysThree(f.three, nav, onEvent) }
+                    } else if (!state.date.isBefore(state.today)) {
+                        item {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Star, contentDescription = null, tint = PlannerColors.Journal, modifier = Modifier.size(15.dp))
+                                Text(
+                                    "  Choose ${if (state.date == state.today) "today's" else "the day's"} 3 · long-press a task, or start rapid log with !",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    f.notice?.let { n ->
+                        item { Text(n, Modifier.padding(horizontal = 20.dp, vertical = 4.dp), fontSize = 13.sp, color = PlannerColors.Accent) }
+                    }
                     // still open: late today, and left from earlier days
                     if (f.stillOpen.isNotEmpty()) {
                         item {
@@ -201,63 +226,6 @@ internal fun FocusDayUi(
                                     }
                                 }
                                 shown.forEach { row -> StillOpenRow(row, nav, onEvent) }
-                            }
-                        }
-                    }
-                    // next up
-                    f.nextUp?.let { next ->
-                        item {
-                            Column(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                                    .clip(RoundedCornerShape(22.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .clickable { openRow(nav, next) }
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Row {
-                                    SectionLabel("Next up · ${f.nextUpCountdown}")
-                                    Spacer(Modifier.weight(1f))
-                                    Text(next.timeLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Text(next.title, fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 25.sp)
-                                val details = listOf(next.trailing, next.meta).filter { it.isNotBlank() } + next.tags.map { "● " + it.name }
-                                if (details.isNotEmpty()) {
-                                    Text(details.joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                // checklist items, tickable right here
-                                if (next.checklist.isNotEmpty()) {
-                                    Column {
-                                        next.checklist.take(6).forEach { item ->
-                                            Row(
-                                                Modifier.fillMaxWidth().clickable { onEvent(DayEvent.ToggleChecklistItem(item.id, !item.done)) },
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                CheckCircle(checked = item.done, onToggle = { onEvent(DayEvent.ToggleChecklistItem(item.id, !item.done)) }, size = 16.dp)
-                                                Text(
-                                                    item.text,
-                                                    fontSize = 14.sp,
-                                                    color = if (item.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                                    textDecoration = if (item.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                                )
-                                            }
-                                        }
-                                        if (next.checklist.size > 6) {
-                                            Text("+${next.checklist.size - 6} more", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 28.dp))
-                                        }
-                                    }
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (next.routine != null) {
-                                        Pill("▶ Start", true, { openRow(nav, next) })
-                                    } else {
-                                        Action("✓ Done", PlannerColors.Done) { onEvent(DayEvent.Toggle(next)) }
-                                    }
-                                    Action("Later", null) { onEvent(DayEvent.Later(next)) }
-                                    Action("Tomorrow", null) { onEvent(DayEvent.Tomorrow(next)) }
-                                }
                             }
                         }
                     }
@@ -310,7 +278,7 @@ internal fun FocusDayUi(
                             itemsIndexed(f.earlier, key = { _, r -> "e:" + r.key }) { i, row -> DayEntryRow(row, f.earlier, i, nav, onEvent) }
                         }
                     }
-                    if (f.stillOpen.isEmpty() && f.nextUp == null && f.later.isEmpty() && f.earlier.isEmpty()) {
+                    if (f.three.isEmpty() && f.stillOpen.isEmpty() && f.later.isEmpty() && f.earlier.isEmpty()) {
                         item {
                             Text(
                                 "Nothing planned. Tap below to log something.",
@@ -331,6 +299,7 @@ internal fun FocusDayUi(
         }
     }
 
+    SwapDialog(state, onEvent)
     if (monthOpen) {
         ModalBottomSheet(onDismissRequest = { monthOpen = false }) {
             MonthCalendar(
@@ -352,26 +321,8 @@ internal fun FocusDayUi(
             }, modifier = Modifier.padding(horizontal = 12.dp)) {
                 Text("Open ${state.date.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)} month log", color = PlannerColors.Accent, fontWeight = FontWeight.Bold)
             }
-            LayoutSwitch(state.focusLayout) {
-                onEvent(DayEvent.ToggleLayout)
-                monthOpen = false
-            }
             Spacer(Modifier.height(24.dp))
         }
-    }
-}
-
-/** Switch between the "Now & next" layout and the classic timeline (kept as an alternative). */
-@Composable
-internal fun LayoutSwitch(focus: Boolean, onToggle: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Day layout", Modifier.weight(1f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Pill("Now & next", focus, { if (!focus) onToggle() })
-        Spacer(Modifier.width(6.dp))
-        Pill("Timeline", !focus, { if (focus) onToggle() })
     }
 }
 
@@ -390,9 +341,13 @@ private fun Action(label: String, color: Color?, onClick: () -> Unit) {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StillOpenRow(row: DayRow, nav: Navigation, onEvent: (DayEvent) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { openRow(nav, row) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        RowMenu(row, menu, onDismiss = { menu = false }, nav = nav, onEvent = onEvent)
+    Row(Modifier.fillMaxWidth().combinedClickable(onClick = { openRow(nav, row) }, onLongClick = { menu = true }).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             row.timeLabel,
             modifier = Modifier.width(52.dp),
@@ -409,7 +364,13 @@ private fun StillOpenRow(row: DayRow, nav: Navigation, onEvent: (DayEvent) -> Un
             CheckCircle(checked = false, onToggle = { onEvent(DayEvent.Toggle(row)) })
         }
         Column(Modifier.weight(1f).padding(start = 6.dp)) {
-            Text(row.title, fontSize = 15.sp, maxLines = 2)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (row.wasFocused) {
+                    // it was one of that day's 3
+                    Icon(Icons.Filled.Star, contentDescription = "Was one of the day's 3", tint = PlannerColors.Journal, modifier = Modifier.size(13.dp).padding(end = 3.dp))
+                }
+                Text(row.title, fontSize = 15.sp, maxLines = 2)
+            }
             val sub = listOf(row.meta).filter { it.isNotBlank() } + row.tags.map { "● " + it.name }
             if (sub.isNotEmpty()) Text(sub.joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
@@ -427,6 +388,7 @@ private fun StillOpenRow(row: DayRow, nav: Navigation, onEvent: (DayEvent) -> Un
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+    }
 }
 
 @Composable
@@ -440,7 +402,9 @@ private fun FreeLine(label: String) {
 @Composable
 private fun DayEntryRow(row: DayRow, rows: List<DayRow>, i: Int, nav: Navigation, onEvent: (DayEvent) -> Unit) {
     val colors = rows.map { timelineColor(it.kind, it.state, isMoney = it.money != null, importance = it.importance, isRoutine = it.routine != null) }
+    var menu by remember { mutableStateOf(false) }
     Box(Modifier.padding(start = 2.dp, end = 8.dp)) {
+        RowMenu(row, menu, onDismiss = { menu = false }, nav = nav, onEvent = onEvent)
         EntryRow(
             kind = row.kind,
             title = row.title,
@@ -460,8 +424,102 @@ private fun DayEntryRow(row: DayRow, rows: List<DayRow>, i: Int, nav: Navigation
             photos = row.photos,
             trailing = row.trailing,
             routine = row.routine,
+            onLongClick = if (row.money == null && row.kind == EntryKind.TASK) ({ menu = true }) else null,
         )
     }
+}
+
+/** Long-press menu for a task: today's 3 first, then Later, Tomorrow and Edit. */
+@Composable
+private fun RowMenu(row: DayRow, open: Boolean, onDismiss: () -> Unit, nav: Navigation, onEvent: (DayEvent) -> Unit) {
+    DropdownMenu(expanded = open, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text(if (row.focused) "Remove from today's 3" else "Add to today's 3", fontWeight = FontWeight.Bold) },
+            leadingIcon = { Icon(Icons.Filled.Star, null, tint = PlannerColors.Journal) },
+            onClick = {
+                onDismiss()
+                onEvent(DayEvent.ToggleFocus(row))
+            },
+        )
+        if (row.state == com.ivy.planner.domain.EntryState.OPEN) {
+            DropdownMenuItem(text = { Text("Later · next free slot") }, onClick = { onDismiss(); onEvent(DayEvent.Later(row)) })
+            DropdownMenuItem(text = { Text("Tomorrow") }, onClick = { onDismiss(); onEvent(DayEvent.Tomorrow(row)) })
+        }
+        DropdownMenuItem(text = { Text("Edit") }, onClick = { onDismiss(); openRow(nav, row) })
+    }
+}
+
+/** The day's starred tasks, at the top: tick them off, long-press to unstar or move. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TodaysThree(three: List<DayRow>, nav: Navigation, onEvent: (DayEvent) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.5.dp, PlannerColors.Journal.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .padding(start = 8.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Star, contentDescription = null, tint = PlannerColors.Journal, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            SectionLabel("Today's 3", PlannerColors.Journal)
+            Spacer(Modifier.weight(1f))
+            Text("${three.count { it.state == com.ivy.planner.domain.EntryState.DONE }} of ${three.size} done", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        three.forEach { row ->
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                RowMenu(row, menu, onDismiss = { menu = false }, nav = nav, onEvent = onEvent)
+                Row(
+                    Modifier.fillMaxWidth().combinedClickable(onClick = { openRow(nav, row) }, onLongClick = { menu = true }).padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (row.routine != null) {
+                        com.ivy.planner.ui.RoutineRing(row.routine.first, row.routine.second)
+                    } else {
+                        CheckCircle(checked = row.state == com.ivy.planner.domain.EntryState.DONE, onToggle = { onEvent(DayEvent.Toggle(row)) })
+                    }
+                    val done = row.state == com.ivy.planner.domain.EntryState.DONE
+                    Text(
+                        row.title,
+                        Modifier.weight(1f).padding(start = 6.dp),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        textDecoration = if (done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                        maxLines = 2,
+                    )
+                    Text(row.timeLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** The day already has three: pick one to swap out for the new one. */
+@Composable
+internal fun SwapDialog(state: DayState, onEvent: (DayEvent) -> Unit) {
+    val incoming = state.focus.swapIn ?: return
+    AlertDialog(
+        onDismissRequest = { onEvent(DayEvent.CancelSwap) },
+        title = { Text("Today's 3 is full") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Swap one out for “${incoming.title}”:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                state.focus.three.forEach { r ->
+                    Text(
+                        "★  " + r.title,
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onEvent(DayEvent.SwapFocus(r)) }.padding(vertical = 10.dp, horizontal = 6.dp),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onEvent(DayEvent.CancelSwap) }) { Text("Keep as is") } },
+    )
 }
 
 /**

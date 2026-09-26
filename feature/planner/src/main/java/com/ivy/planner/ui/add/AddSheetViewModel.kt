@@ -71,6 +71,10 @@ class AddSheetViewModel @Inject constructor(
     var files by mutableStateOf(listOf<Uri>())
     var checklist by mutableStateOf(listOf<String>())
     var showChecklist by mutableStateOf(false)
+    /** One of the day's 3. */
+    var focus by mutableStateOf(false)
+    /** Set when the day already had three, so the star couldn't be added. */
+    var focusFull by mutableStateOf(false)
 
     init {
         com.ivy.planner.ui.ImportanceNames.labels = prefs.importanceLabels
@@ -95,6 +99,8 @@ class AddSheetViewModel @Inject constructor(
         files = emptyList()
         checklist = emptyList()
         showChecklist = false
+        focus = false
+        focusFull = false
     }
 
     val parsed get() = RapidLogParser.parse(text, LocalDate.now())
@@ -158,6 +164,12 @@ class AddSheetViewModel @Inject constructor(
             val collections = library.resolveTags(p.tags) + listOfNotNull(boardId) +
                 if (k == EntryKind.JOURNAL) collectionIds.toList() else emptyList()
             if (collections.isNotEmpty()) library.setCollections(owner, collections)
+            if (k == EntryKind.TASK && (focus || p.focus) && !planner.addFocus(d, owner)) {
+                // saved, but the day already has three: say so instead of closing
+                focusFull = true
+                text = ""
+                return@launch
+            }
             onDone()
         }
     }

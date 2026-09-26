@@ -119,4 +119,15 @@ class RapidLogParserTest {
         p("bought the car 25/10/2019").date shouldBe LocalDate.of(2019, 10, 25)
         p("renew licence 1/1/2030").date shouldBe LocalDate.of(2030, 1, 1)
     }
+
+    @Test
+    fun `an exclamation mark at the start makes it one of today's 3`() {
+        p("! Close L&T proposal at 3pm").let {
+            it.focus shouldBe true
+            it.title shouldBe "Close L&T proposal"
+            it.time shouldBe LocalTime.of(15, 0)
+        }
+        p("Close proposal!").focus shouldBe false
+        p("- ! a note").focus shouldBe false
+    }
 }

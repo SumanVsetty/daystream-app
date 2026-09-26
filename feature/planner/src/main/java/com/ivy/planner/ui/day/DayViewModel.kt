@@ -75,6 +75,10 @@ data class DayRow(
     val isRoutine: Boolean = false,
     /** When the entry was added (epoch millis), for the "just logged" grace period. */
     val createdAt: Long = 0,
+    /** One of this day's 3. */
+    val focused: Boolean = false,
+    /** Left over from an earlier day where it was one of that day's 3. */
+    val wasFocused: Boolean = false,
     val checklist: List<com.ivy.planner.domain.ChecklistItem> = emptyList(),
     /** For routines: steps done and total today. */
     val routine: Pair<Int, Int>? = null,
@@ -106,6 +110,11 @@ sealed interface LaterItem {
 /** The day split for the "Now & next" layout. */
 @Immutable
 data class FocusDay(
+    /** Today's 3: the tasks you starred for this day (done ones stay, ticked). */
+    val three: List<DayRow> = emptyList(),
+    /** Asks which star to swap out when a fourth is added. */
+    val swapIn: DayRow? = null,
+    val notice: String? = null,
     /** Open tasks from earlier today (and earlier days), latest problems first. */
     val stillOpen: List<DayRow> = emptyList(),
     val nextUp: DayRow? = null,
@@ -131,6 +140,11 @@ sealed interface DayEvent {
     data object ToggleFilter : DayEvent
     data object ToggleLayout : DayEvent
     data class ToggleChecklistItem(val itemId: String, val done: Boolean) : DayEvent
+    /** Star or unstar a task as one of the day's 3. */
+    data class ToggleFocus(val row: DayRow) : DayEvent
+    /** The day is full: replace [out] with the task waiting to be starred. */
+    data class SwapFocus(val out: DayRow) : DayEvent
+    data object CancelSwap : DayEvent
     /** Move to the next free slot today. */
     data class Later(val row: DayRow) : DayEvent
     /** Same time tomorrow (repeating tasks: skip today). */
@@ -151,6 +165,8 @@ class DayViewModel @Inject constructor(
     private var selected by mutableStateOf(PlannerSelection.date)
     private var todoOnly by mutableStateOf(prefs.todoOnly)
     private var focusLayout by mutableStateOf(prefs.focusLayout)
+    private var swapIn by mutableStateOf<DayRow?>(null)
+    private var notice by mutableStateOf<String?>(null)
     private var refresh by mutableIntStateOf(0)
 
     @Composable
@@ -172,6 +188,7 @@ class DayViewModel @Inject constructor(
             value = moneySource.between(week.monday, week.sunday)
         }
         val lib by remember { library.observe() }.collectAsState(initial = null)
+        val stars by remember { repository.observeFocus() }.collectAsState(initial = emptySet())
         val routineSteps by remember { routines.observeSteps() }.collectAsState(initial = emptyMap())
         val stepStates by remember(week) { routines.observeStates(week.monday) }.collectAsState(initial = emptyMap())
 
@@ -180,7 +197,12 @@ class DayViewModel @Inject constructor(
             todoOnly, null,
         )
         val allRows = (
-            itemsFor(s, date, today).map { it.toRow(s, today).withLibrary(lib).withRoutine(routineSteps, stepStates) } +
+            itemsFor(s, date, today).map { r ->
+                r.toRow(s, today).withLibrary(lib).withRoutine(routineSteps, stepStates).let { row ->
+                    val owner = row.entryId ?: row.seriesId
+                    row.copy(focused = owner != null && "$owner@$date" in stars)
+                }
+            } +
                 money.filter { it.date == date }.map { it.toRow() }
             )
             .sortedWith(compareBy<DayRow>({ it.time != null }, { it.time }, { it.title.lowercase() }))
@@ -201,7 +223,8 @@ class DayViewModel @Inject constructor(
             todoOnly = todoOnly,
             scrollIndex = scrollIndex,
             focusLayout = focusLayout,
-            focus = focusDay(allRows, s.overdue, date, today, now, money.filter { it.date == date }),
+            focus = focusDay(allRows, s.overdue, date, today, now, money.filter { it.date == date }, stars)
+                .copy(swapIn = swapIn, notice = notice),
         )
     }
 
@@ -215,8 +238,13 @@ class DayViewModel @Inject constructor(
         today: LocalDate,
         now: LocalTime,
         money: List<MoneyItem>,
+        stars: Set<String>,
     ): FocusDay {
-        val tasks = rows.filter { it.money == null && it.kind == EntryKind.TASK && it.state != EntryState.SKIPPED }
+        // today's 3 show only in their own block
+        val three = rows.filter { it.focused }
+        @Suppress("NAME_SHADOWING")
+        val rows = rows.filterNot { it.focused }
+        val tasks = (rows + three).filter { it.money == null && it.kind == EntryKind.TASK && it.state != EntryState.SKIPPED }
         val spentByCurrency = money.filter { !it.isIncome }.groupBy { it.currency }
         val spent = spentByCurrency.map { (c, l) -> com.ivy.planner.ui.formatMoney(l.sumOf { it.amount }, c) }
             .takeIf { it.isNotEmpty() }?.joinToString(" + ")
@@ -224,7 +252,7 @@ class DayViewModel @Inject constructor(
         if (date != today) {
             // past days: the whole day as one list; future days: everything is planned
             val later = if (date.isAfter(today)) withFreeTime(rows, LocalTime.of(8, 0)) else rows.map { LaterItem.Row(it) }
-            return FocusDay(later = later, done = done, total = tasks.size, spent = spent, isToday = false)
+            return FocusDay(three = three, later = later, done = done, total = tasks.size, spent = spent, isToday = false)
         }
         val stillOpen = rows.filter { it.isOpenTaskLike() && it.time != null && it.time < now } +
             overdue.map { e ->
@@ -234,10 +262,11 @@ class DayViewModel @Inject constructor(
                     state = e.state, repeating = false, entryId = e.id, seriesId = null,
                     date = e.date ?: date, time = e.time,
                     timeLabel = e.date?.let { "from " + it.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH) } ?: "",
+                    wasFocused = e.date?.let { "${e.id}@$it" in stars } ?: false,
                 )
             }
-        val upcoming = rows.filter { it.isOpenTaskLike() && it.time != null && it.time >= now }
-        val nextUp = upcoming.firstOrNull()
+        // no separate Next up: the importance is carried by today's 3
+        val nextUp: DayRow? = null
         // just logged: from the last few minutes, or added in the last few minutes (whatever its time)
         val graceFrom = now.minusMinutes(GRACE_MINUTES)
         val addedSince = System.currentTimeMillis() - GRACE_MINUTES * 60_000
@@ -247,7 +276,7 @@ class DayViewModel @Inject constructor(
             r.key != nextUp?.key && r !in stillOpen && r.state != EntryState.DONE &&
                 (r.time == null && r.kind == EntryKind.EVENT || (r.time != null && r.time >= now) || justLogged(r))
         }
-        val from = nextUp?.let { n -> n.time!!.plusMinutes((n.durationMinutes ?: 15).toLong()) } ?: now
+        val from = now
         val earlier = rows.filter { r -> r.key != nextUp?.key && r !in stillOpen && r !in laterRows }
         val summary = listOfNotNull(
             earlier.count { it.money == null && it.kind == EntryKind.TASK && it.state == EntryState.DONE }.takeIf { it > 0 }?.let { "$it done" },
@@ -257,6 +286,7 @@ class DayViewModel @Inject constructor(
             earlier.count { it.money == null && it.kind == EntryKind.JOURNAL }.takeIf { it > 0 }?.let { if (it == 1) "1 memory" else "$it memories" },
         ).joinToString(" · ")
         return FocusDay(
+            three = three,
             stillOpen = stillOpen,
             nextUp = nextUp,
             nextUpCountdown = nextUp?.time?.let { FreeTime.countdown(now, it) } ?: "",
@@ -448,7 +478,17 @@ class DayViewModel @Inject constructor(
                     repository.setOccurrenceState(row.seriesId, row.date, newState)
                 }
             }
-            is DayEvent.RapidLog -> viewModelScope.launch { repository.rapidLog(event.text, selected, library) }
+            is DayEvent.RapidLog -> viewModelScope.launch {
+                val parsed = com.ivy.planner.domain.RapidLogParser.parse(event.text, LocalDate.now())
+                if (parsed.focus && repository.focusFor(parsed.date ?: selected).size >= com.ivy.planner.data.FOCUS_MAX) {
+                    notice = "Today's 3 is full, so it was added without a star. Long-press a task to swap."
+                }
+                repository.rapidLog(event.text, selected, library)
+                if (notice != null) {
+                    kotlinx.coroutines.delay(5_000)
+                    notice = null
+                }
+            }
             is DayEvent.OverdueDone -> viewModelScope.launch { repository.setState(event.id, EntryState.DONE) }
             is DayEvent.OverdueMove -> viewModelScope.launch {
                 repository.move(event.id, event.date, today = LocalDate.now())
@@ -460,6 +500,23 @@ class DayViewModel @Inject constructor(
             }
             DayEvent.Refresh -> refresh++
             is DayEvent.ToggleChecklistItem -> viewModelScope.launch { library.setChecklistItem(event.itemId, event.done) }
+            is DayEvent.ToggleFocus -> viewModelScope.launch {
+                val row = event.row
+                val owner = row.entryId ?: row.seriesId ?: return@launch
+                if (row.focused) {
+                    repository.removeFocus(row.date, owner)
+                } else if (!repository.addFocus(row.date, owner)) {
+                    swapIn = row // full: ask which one to swap out
+                }
+            }
+            is DayEvent.SwapFocus -> viewModelScope.launch {
+                val into = swapIn ?: return@launch
+                val out = event.out.entryId ?: event.out.seriesId ?: return@launch
+                val add = into.entryId ?: into.seriesId ?: return@launch
+                repository.swapFocus(into.date, out, add)
+                swapIn = null
+            }
+            DayEvent.CancelSwap -> swapIn = null
             DayEvent.ToggleLayout -> {
                 focusLayout = !focusLayout
                 prefs.focusLayout = focusLayout
