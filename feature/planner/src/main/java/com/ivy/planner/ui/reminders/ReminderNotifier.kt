@@ -8,6 +8,8 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.ivy.planner.domain.EntryKind
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -70,6 +72,13 @@ data class ReminderInfo(
 class ReminderNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+    /** The full-colour logo tile, drawn once for the notification's large icon. */
+    private val largeIcon by lazy {
+        runCatching {
+            ContextCompat.getDrawable(context, com.ivy.ui.R.drawable.ic_apeiro_logo_tile)?.toBitmap(192, 192)
+        }.getOrNull()
+    }
+
     fun ensureChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
@@ -103,7 +112,9 @@ class ReminderNotifier @Inject constructor(
             flags,
         )
         val builder = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(com.ivy.ui.R.drawable.ic_launcher_monochrome)
+            // the status-bar icon is a tight white silhouette; the colour logo shows on the right
+            .setSmallIcon(com.ivy.ui.R.drawable.ic_apeiro_notification)
+            .setLargeIcon(largeIcon)
             .setContentTitle(info.title)
             .setContentText(info.text)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)

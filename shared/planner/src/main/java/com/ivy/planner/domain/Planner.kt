@@ -42,6 +42,8 @@ data class Entry(
     val durationMinutes: Int? = null,
     /** A month goal belongs to a month (e.g. 202609) rather than a day or week. */
     val month: Int? = null,
+    /** When it was added (epoch millis); 0 when unknown. */
+    val createdAt: Long = 0,
 )
 
 /** A repeating task or routine: the "master" that owns the schedule. */

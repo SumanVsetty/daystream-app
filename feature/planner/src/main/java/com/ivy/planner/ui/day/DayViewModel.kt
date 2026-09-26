@@ -73,6 +73,8 @@ data class DayRow(
     val tags: List<RowTag> = emptyList(),
     val photos: List<File> = emptyList(),
     val isRoutine: Boolean = false,
+    /** When the entry was added (epoch millis), for the "just logged" grace period. */
+    val createdAt: Long = 0,
     val checklist: List<com.ivy.planner.domain.ChecklistItem> = emptyList(),
     /** For routines: steps done and total today. */
     val routine: Pair<Int, Int>? = null,
@@ -154,7 +156,13 @@ class DayViewModel @Inject constructor(
     @Composable
     override fun uiState(): DayState {
         val today = LocalDate.now()
-        val now = LocalTime.now()
+        // ticks every 30 s, so the countdown and the "just logged" grace period stay current
+        val now by produceState(LocalTime.now()) {
+            while (true) {
+                kotlinx.coroutines.delay(30_000)
+                value = LocalTime.now()
+            }
+        }
         val date = selected
         val week = date.isoWeek()
         val snapshot by remember(week, today) {
@@ -230,9 +238,14 @@ class DayViewModel @Inject constructor(
             }
         val upcoming = rows.filter { it.isOpenTaskLike() && it.time != null && it.time >= now }
         val nextUp = upcoming.firstOrNull()
+        // just logged: from the last few minutes, or added in the last few minutes (whatever its time)
+        val graceFrom = now.minusMinutes(GRACE_MINUTES)
+        val addedSince = System.currentTimeMillis() - GRACE_MINUTES * 60_000
+        fun justLogged(r: DayRow) = r.state != EntryState.DONE && !r.isOpenTaskLike() &&
+            ((r.time != null && r.time >= graceFrom && graceFrom < now) || (r.createdAt > 0 && r.createdAt >= addedSince))
         val laterRows = rows.filter { r ->
             r.key != nextUp?.key && r !in stillOpen && r.state != EntryState.DONE &&
-                (r.time == null && r.kind == EntryKind.EVENT || (r.time != null && r.time >= now))
+                (r.time == null && r.kind == EntryKind.EVENT || (r.time != null && r.time >= now) || justLogged(r))
         }
         val from = nextUp?.let { n -> n.time!!.plusMinutes((n.durationMinutes ?: 15).toLong()) } ?: now
         val earlier = rows.filter { r -> r.key != nextUp?.key && r !in stillOpen && r !in laterRows }
@@ -255,6 +268,11 @@ class DayViewModel @Inject constructor(
             spent = spent,
             isToday = true,
         )
+    }
+
+    private companion object {
+        /** How long something just logged stays in view before folding into Earlier today. */
+        const val GRACE_MINUTES = 5L
     }
 
     /** Rows with "Free 20:45 – 21:30" lines where there's half an hour or more. */
@@ -319,6 +337,7 @@ class DayViewModel @Inject constructor(
                 if (entry.migrationCount > 0) "migrated ${entry.migrationCount}×" else null,
             ).joinToString(" · "),
             timeLabel = entry.time?.label() ?: "",
+            createdAt = entry.createdAt,
             trailing = when {
                 entry.kind == EntryKind.TASK && entry.time != null -> duration(entry.durationMinutes)
                 entry.kind == EntryKind.EVENT && entry.time == null -> "All day"

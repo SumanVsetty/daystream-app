@@ -241,7 +241,7 @@ fun EntryRow(
                     fontSize = 16.sp,
                     lineHeight = 21.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (faded || kind == EntryKind.NOTE) muted else onSurface,
+                    color = if (faded) muted else onSurface,
                     textDecoration = if (state == EntryState.DONE) TextDecoration.LineThrough else null,
                 )
                 val right = moneyLabel ?: trailing

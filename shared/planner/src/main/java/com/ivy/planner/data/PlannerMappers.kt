@@ -32,6 +32,7 @@ fun EntryEntity.toDomain(): Entry = Entry(
     completedAt = completedAt,
     durationMinutes = durationMinutes,
     month = monthKey,
+    createdAt = createdAt,
 )
 
 fun Entry.toEntity(createdAt: Long, now: Long): EntryEntity = EntryEntity(
