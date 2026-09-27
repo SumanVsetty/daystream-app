@@ -29,7 +29,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReminderEntity::class,
         FocusEntity::class,
     ],
-    version = 5,
+    version = PlannerDatabase.VERSION,
     exportSchema = true,
 )
 abstract class PlannerDatabase : RoomDatabase() {
@@ -48,6 +48,9 @@ abstract class PlannerDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "apeiro_planner.db"
+
+        /** The database version this build understands. */
+        const val VERSION = 5
 
         /** v2: task/event durations and a reminders table. Existing data is kept. */
         val MIGRATION_1_2 = object : Migration(1, 2) {

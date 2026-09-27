@@ -72,6 +72,7 @@ interface AutoBackupEntryPoint {
  */
 class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
+        if (com.ivy.planner.data.StartupGuard.dataTooNew) return Result.success()
         val deps = EntryPointAccessors.fromApplication(applicationContext, AutoBackupEntryPoint::class.java)
         val prefs = deps.prefs()
         val folder = prefs.autoBackupFolder?.takeIf { it.isNotBlank() }?.let(Uri::parse) ?: return Result.success()

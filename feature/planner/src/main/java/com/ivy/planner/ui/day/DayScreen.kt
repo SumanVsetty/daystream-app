@@ -1,6 +1,7 @@
 package com.ivy.planner.ui.day
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -123,6 +124,7 @@ private fun DayChooser(state: DayState, onEvent: (DayEvent) -> Unit, asTab: Bool
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
         FocusDayUi(state, onEvent, asTab) {
+            CrashBanner()
             NotificationBanner()
             if (state.date == state.today && state.today.dayOfWeek == java.time.DayOfWeek.MONDAY) {
                 val nav = navigation()
@@ -159,5 +161,36 @@ private fun SlimBanner(text: String, action: String, onClick: () -> Unit) {
     ) {
         Text(text, Modifier.weight(1f), fontSize = 14.sp)
         Text(action, color = PlannerColors.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    }
+}
+
+/** After a crash: offer to share the report (to send to the developer), or dismiss it. */
+@Composable
+private fun CrashBanner() {
+    val context = LocalContext.current
+    var report by remember { mutableStateOf(com.ivy.planner.data.CrashLog.read(context)) }
+    val text = report ?: return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Apeiro closed unexpectedly last time", Modifier.weight(1f), fontSize = 13.sp)
+        TextButton(onClick = {
+            val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+                .putExtra(Intent.EXTRA_SUBJECT, "Apeiro crash report")
+                .putExtra(Intent.EXTRA_TEXT, text)
+            context.startActivity(Intent.createChooser(send, "Share report").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            com.ivy.planner.data.CrashLog.clear(context)
+            report = null
+        }) { Text("Share report", color = PlannerColors.Accent, fontWeight = FontWeight.Bold) }
+        TextButton(onClick = {
+            com.ivy.planner.data.CrashLog.clear(context)
+            report = null
+        }) { Text("Dismiss") }
     }
 }

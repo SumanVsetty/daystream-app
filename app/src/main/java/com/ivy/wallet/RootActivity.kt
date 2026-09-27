@@ -20,9 +20,13 @@ import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -47,6 +51,7 @@ import com.ivy.legacy.utils.sendToCrashlytics
 import com.ivy.legacy.utils.simpleActivityForResultLauncher
 import com.ivy.navigation.Navigation
 import com.ivy.navigation.NavigationRoot
+import com.ivy.planner.data.StartupGuard
 import com.ivy.ui.R
 import com.ivy.ui.time.TimeFormatter
 import com.ivy.ui.time.impl.DateTimePicker
@@ -95,6 +100,11 @@ class RootActivity : AppCompatActivity(), RootScreen {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // older build meeting newer data: explain, and don't open anything
+        StartupGuard.problem?.let { message ->
+            setContent { DataTooNewScreen(message) }
+            return
+        }
         setupApp()
         setContent {
             val viewModel: RootViewModel = viewModel()
@@ -462,5 +472,25 @@ class RootActivity : AppCompatActivity(), RootScreen {
         val appWidgetManager: AppWidgetManager = this.getSystemService(AppWidgetManager::class.java)
         val addTransactionWidget = ComponentName(this, widget)
         appWidgetManager.requestPinAppWidget(addTransactionWidget, null, null)
+    }
+}
+
+/** Shown instead of the app when this build is older than the data on the phone. */
+@androidx.compose.runtime.Composable
+private fun DataTooNewScreen(message: String) {
+    androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {
+        androidx.compose.material3.Surface(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+            androidx.compose.foundation.layout.Column(
+                modifier = androidx.compose.ui.Modifier.fillMaxSize().padding(32.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            ) {
+                androidx.compose.material3.Text(
+                    "Please update Apeiro",
+                    style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+                )
+                androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(12.dp))
+                androidx.compose.material3.Text(message, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
+            }
+        }
     }
 }

@@ -31,6 +31,7 @@ class ReminderScheduler @Inject constructor(
     private val alarms get() = context.getSystemService(AlarmManager::class.java)
 
     suspend fun schedule() = lock.withLock {
+        if (com.ivy.planner.data.StartupGuard.dataTooNew) return@withLock
         val now = LocalDateTime.now()
         val today = now.toLocalDate()
         val targets = repository.reminderTargets(today, today.plusDays(2))

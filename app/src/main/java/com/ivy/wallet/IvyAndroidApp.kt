@@ -4,11 +4,13 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.ivy.base.legacy.appContext
+import com.ivy.planner.data.CrashLog
+import com.ivy.planner.data.StartupGuard
 import com.ivy.planner.ui.reminders.ReminderSync
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 import timber.log.Timber
 import timber.log.Timber.DebugTree
-import javax.inject.Inject
 
 /**
  * Created by iliyan on 24.02.18.
@@ -30,10 +32,13 @@ class IvyAndroidApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         appContext = this
+        // a crash leaves a report on the phone; newer data than this build understands is never opened
+        CrashLog.install(this)
+        StartupGuard.check(this)
 
         if (BuildConfig.DEBUG) {
             Timber.plant(DebugTree())
         }
-        reminderSync.start()
+        if (!StartupGuard.dataTooNew) reminderSync.start()
     }
 }
